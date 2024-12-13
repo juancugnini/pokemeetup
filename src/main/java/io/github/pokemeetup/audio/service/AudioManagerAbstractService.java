@@ -1,13 +1,12 @@
-package io.github.pokemeetup.services.audio;
+package io.github.pokemeetup.audio.service;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.audio.Music;
-import io.github.pokemeetup.config.SoundConfig;
+import io.github.pokemeetup.audio.config.SoundConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
-import java.util.Objects;
 
 @Slf4j
 public abstract class AudioManagerAbstractService implements AudioManagerService {

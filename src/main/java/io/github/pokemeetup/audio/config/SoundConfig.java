@@ -1,4 +1,4 @@
-package io.github.pokemeetup.config;
+package io.github.pokemeetup.audio.config;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;

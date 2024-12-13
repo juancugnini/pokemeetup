@@ -1,4 +1,4 @@
-package io.github.pokemeetup.models;
+package io.github.pokemeetup.world.model;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;

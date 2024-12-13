@@ -1,4 +1,4 @@
-package io.github.pokemeetup.services.audio;
+package io.github.pokemeetup.audio.service;
 
 
 import jakarta.annotation.PreDestroy;

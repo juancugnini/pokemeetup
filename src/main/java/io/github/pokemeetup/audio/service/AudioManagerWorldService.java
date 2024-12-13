@@ -1,6 +1,6 @@
-package io.github.pokemeetup.services.audio;
+package io.github.pokemeetup.audio.service;
 
-import io.github.pokemeetup.config.SoundConfig;
+import io.github.pokemeetup.audio.config.SoundConfig;
 import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
