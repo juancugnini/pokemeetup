@@ -1,5 +1,8 @@
 package io.github.pokemeetup.world.model;
 
+import lombok.Getter;
+
+@Getter
 public enum ObjectType {
     TREE_0(true, true),
     TREE_1(true, true),
@@ -18,6 +21,4 @@ public enum ObjectType {
         this.collidable = collidable;
     }
 
-    public boolean isPermanent() { return permanent; }
-    public boolean isCollidable() { return collidable; }
 }

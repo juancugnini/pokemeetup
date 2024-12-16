@@ -1,7 +1,8 @@
 package io.github.pokemeetup;
 
 import com.badlogic.gdx.Game;
-import io.github.pokemeetup.screens.GameScreen;
+import io.github.pokemeetup.core.screen.GameScreen;
+import io.github.pokemeetup.core.screen.ModeSelectionScreen;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ApplicationContext;
 
@@ -21,9 +22,9 @@ public class GdxGame extends Game {
 
         // Retrieve GameScreen from Spring context
         GameScreen gameScreen = springContext.getBean(GameScreen.class);
-
+        ModeSelectionScreen modeSelectionScreen = springContext.getBean(ModeSelectionScreen.class);
         // Set the active screen
-        setScreen(gameScreen);
+        setScreen(modeSelectionScreen);
     }
 
     @Override

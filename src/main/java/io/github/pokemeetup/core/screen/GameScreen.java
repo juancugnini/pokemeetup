@@ -1,4 +1,4 @@
-package io.github.pokemeetup.screens;
+package io.github.pokemeetup.core.screen;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Screen;
@@ -20,7 +20,7 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * GameScreen handles rendering of the game world and player.
+ * GameScreen handles rendering of the game world and player. This is also where we handle the game core loop logic.
  */
 @Component
 public class GameScreen implements Screen {
@@ -33,7 +33,6 @@ public class GameScreen implements Screen {
     private final AudioService audioService;
     private final InputService inputService;
     private final TileManager tileManager;
-
     private final WorldObjectManager worldObjectManager;
 
     private OrthographicCamera camera;
@@ -71,14 +70,14 @@ public class GameScreen implements Screen {
     @Override
     public void show() {
         float baseWidth = TARGET_VIEWPORT_WIDTH_TILES * TILE_SIZE;
-        float aspect = (float)Gdx.graphics.getHeight() / Gdx.graphics.getWidth();
+        float aspect = (float) Gdx.graphics.getHeight() / Gdx.graphics.getWidth();
         float baseHeight = baseWidth * aspect;
 
         camera = new OrthographicCamera();
         camera.setToOrtho(false, baseWidth, baseHeight);
 
         batch = new SpriteBatch();
-        font = new BitmapFont();
+        font = new BitmapFont(); // Consider using a custom font via BitmapFont files
 
         audioService.playMenuMusic();
 
@@ -100,7 +99,7 @@ public class GameScreen implements Screen {
         updateCamera();
 
         // Clear the screen
-        Gdx.gl.glClearColor(0,0,0,1);
+        Gdx.gl.glClearColor(0, 0, 0, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         // Begin SpriteBatch for rendering
@@ -108,8 +107,8 @@ public class GameScreen implements Screen {
         batch.begin();
 
         // Retrieve player tile position
-        int playerTileX = (int)(playerService.getPlayerData().getX());
-        int playerTileY = (int)(playerService.getPlayerData().getY());
+        int playerTileX = (int) (playerService.getPlayerData().getX());
+        int playerTileY = (int) (playerService.getPlayerData().getY());
 
         int viewRadius = 24; // Number of tiles to render around the player
 
@@ -122,8 +121,8 @@ public class GameScreen implements Screen {
                 int chunkY = tileY / 16;
                 int[][] tiles = worldService.getChunkTiles(chunkX, chunkY);
 
-                int localX = Math.floorMod(tileX,16);
-                int localY = Math.floorMod(tileY,16);
+                int localX = Math.floorMod(tileX, 16);
+                int localY = Math.floorMod(tileY, 16);
                 if (tiles != null && localX >= 0 && localX < 16 && localY >= 0 && localY < 16) {
                     int tileType = tiles[localX][localY];
                     TextureRegion region = tileManager.getRegionForTile(tileType);
@@ -171,13 +170,22 @@ public class GameScreen implements Screen {
     }
 
     @Override
-    public void resize(int width, int height) { }
+    public void resize(int width, int height) {
+        camera.viewportWidth = TARGET_VIEWPORT_WIDTH_TILES * TILE_SIZE;
+        float aspect = (float) height / width;
+        camera.viewportHeight = camera.viewportWidth * aspect;
+        camera.update();
+    }
 
     @Override
-    public void pause() {}
+    public void pause() {
+        // Handle pause logic if necessary
+    }
 
     @Override
-    public void resume() {}
+    public void resume() {
+        // Handle resume logic if necessary
+    }
 
     /**
      * Stops music when the screen is hidden.
