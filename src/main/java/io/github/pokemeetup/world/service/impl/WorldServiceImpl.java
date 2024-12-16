@@ -3,58 +3,54 @@ package io.github.pokemeetup.world.service.impl;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.utils.Json;
-
 import io.github.pokemeetup.player.model.PlayerData;
 import io.github.pokemeetup.world.config.BiomeConfigurationLoader;
 import io.github.pokemeetup.world.config.WorldConfig;
-import io.github.pokemeetup.world.model.WorldData;
 import io.github.pokemeetup.world.model.Biome;
 import io.github.pokemeetup.world.model.BiomeType;
+import io.github.pokemeetup.world.model.WorldData;
 import io.github.pokemeetup.world.service.WorldGenerator;
+import io.github.pokemeetup.world.service.WorldObjectManager;
 import io.github.pokemeetup.world.service.WorldService;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
-
 import java.util.Map;
 
 @Service
 public class WorldServiceImpl implements WorldService {
     private static final Logger logger = LoggerFactory.getLogger(WorldServiceImpl.class);
 
-    @Value("${world.seed:12345}")
-    private long seed;
-
-    @Value("${world.biomeConfigPath:config/biomes.json}")
-    private String biomeConfigPath;
-
     @Value("${world.saveFilePath:save/worldData.json}")
     private String saveFilePath;
 
-    private WorldConfig worldConfig;
-    private WorldData worldData;
-    private WorldGenerator generator;
+    private final WorldConfig worldConfig;
+    private final WorldData worldData = new WorldData();
+    private final WorldGenerator generator;
+
+    public WorldServiceImpl(WorldConfig worldConfig, WorldGenerator generator) {
+        this.worldConfig = worldConfig;
+        this.generator = generator;
+    }
 
     @PostConstruct
     public void init() {
-        this.worldConfig = new WorldConfig(seed);
         initialize();
     }
 
     @Override
     public void initialize() {
         BiomeConfigurationLoader loader = new BiomeConfigurationLoader();
-        Map<BiomeType,Biome> biomes = loader.loadBiomes(biomeConfigPath);
+        Map<BiomeType, Biome> biomes = loader.loadBiomes("assets/config/biomes.json");
+        generator.setBiomes(biomes);
 
-        this.generator = new WorldGenerator(worldConfig, biomes);
         loadWorldData();
-        if (this.worldData == null) {
-            this.worldData = new WorldData(worldConfig.getSeed());
+        if (this.worldData.getSeed() == 0) {
+            // If seed not set, set now
+            worldData.setSeed(worldConfig.getSeed());
             logger.info("Created new world data with seed: {}", worldConfig.getSeed());
         }
     }
@@ -66,7 +62,6 @@ public class WorldServiceImpl implements WorldService {
 
     @Override
     public void saveWorldData() {
-        if (worldData == null) return;
         Json json = new Json();
         String dataStr = json.prettyPrint(worldData);
         FileHandle file = Gdx.files.local(saveFilePath);
@@ -83,7 +78,11 @@ public class WorldServiceImpl implements WorldService {
         }
 
         Json json = new Json();
-        this.worldData = json.fromJson(WorldData.class, file.readString());
+        WorldData loadedData = json.fromJson(WorldData.class, file.readString());
+        // Merge loaded data into our worldData
+        worldData.setSeed(loadedData.getSeed());
+        worldData.setPlayers(loadedData.getPlayers());
+        worldData.setChunks(loadedData.getChunks());
         logger.info("Loaded world data from {}", saveFilePath);
     }
 

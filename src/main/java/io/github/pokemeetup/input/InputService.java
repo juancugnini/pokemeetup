@@ -1,67 +1,84 @@
 package io.github.pokemeetup.input;
 
-import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.Input;
+import com.badlogic.gdx.InputAdapter;
 import io.github.pokemeetup.player.model.PlayerDirection;
-import io.github.pokemeetup.player.service.PlayerService;
-import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
+/**
+ * Service to handle player input.
+ */
 @Service
-@Primary
-public class InputService {
+public class InputService extends InputAdapter {
 
-    private final PlayerService playerService;
-    private final InputConfiguration config;
+    private boolean upPressed, downPressed, leftPressed, rightPressed;
+    private boolean runPressed;
 
-    private boolean running = false;
-
-    public InputService(PlayerService playerService, InputConfiguration config) {
-        this.playerService = playerService;
-        this.config = config;
+    /**
+     * Returns the current direction based on pressed keys.
+     * Priority: UP > DOWN > LEFT > RIGHT
+     *
+     * @return Current PlayerDirection or null if no direction is pressed.
+     */
+    public PlayerDirection getCurrentDirection() {
+        if (upPressed) return PlayerDirection.UP;
+        if (downPressed) return PlayerDirection.DOWN;
+        if (leftPressed) return PlayerDirection.LEFT;
+        if (rightPressed) return PlayerDirection.RIGHT;
+        return null;
     }
 
-    public void update(float delta) {
-        running = Gdx.input.isKeyPressed(Input.Keys.SHIFT_LEFT) ||
-                Gdx.input.isKeyPressed(Input.Keys.SHIFT_RIGHT);
-        playerService.setRunning(running);
-
-        
-        boolean moved = false;
-        if (isKeyPressedForDirection(PlayerDirection.UP)) {
-            playerService.move(PlayerDirection.UP);
-            moved = true;
-        }
-        if (isKeyPressedForDirection(PlayerDirection.DOWN)) {
-            playerService.move(PlayerDirection.DOWN);
-            moved = true;
-        }
-        if (isKeyPressedForDirection(PlayerDirection.LEFT)) {
-            playerService.move(PlayerDirection.LEFT);
-            moved = true;
-        }
-        if (isKeyPressedForDirection(PlayerDirection.RIGHT)) {
-            playerService.move(PlayerDirection.RIGHT);
-            moved = true;
-        }
-
-        
+    /**
+     * Checks if the player is currently running.
+     *
+     * @return True if running, else false.
+     */
+    public boolean isRunning() {
+        return runPressed;
     }
 
-    private boolean isKeyPressedForDirection(PlayerDirection direction) {
-        
-        for (int key : configKeysForDirection(direction)) {
-            if (Gdx.input.isKeyPressed(key)) return true;
+    @Override
+    public boolean keyDown(int keycode) {
+        switch (keycode) {
+            case com.badlogic.gdx.Input.Keys.UP:
+                upPressed = true;
+                return true;
+            case com.badlogic.gdx.Input.Keys.DOWN:
+                downPressed = true;
+                return true;
+            case com.badlogic.gdx.Input.Keys.LEFT:
+                leftPressed = true;
+                return true;
+            case com.badlogic.gdx.Input.Keys.RIGHT:
+                rightPressed = true;
+                return true;
+            case com.badlogic.gdx.Input.Keys.Z:
+                runPressed = true;
+                return true;
+            default:
+                return false;
         }
-        return false;
     }
 
-    private int[] configKeysForDirection(PlayerDirection direction) {
-        return switch (direction) {
-            case UP -> new int[]{Input.Keys.W, Input.Keys.UP};
-            case DOWN -> new int[]{Input.Keys.S, Input.Keys.DOWN};
-            case LEFT -> new int[]{Input.Keys.A, Input.Keys.LEFT};
-            case RIGHT -> new int[]{Input.Keys.D, Input.Keys.RIGHT};
-        };
+    @Override
+    public boolean keyUp(int keycode) {
+        switch (keycode) {
+            case com.badlogic.gdx.Input.Keys.UP:
+                upPressed = false;
+                return true;
+            case com.badlogic.gdx.Input.Keys.DOWN:
+                downPressed = false;
+                return true;
+            case com.badlogic.gdx.Input.Keys.LEFT:
+                leftPressed = false;
+                return true;
+            case com.badlogic.gdx.Input.Keys.RIGHT:
+                rightPressed = false;
+                return true;
+            case com.badlogic.gdx.Input.Keys.Z:
+                runPressed = false;
+                return true;
+            default:
+                return false;
+        }
     }
 }

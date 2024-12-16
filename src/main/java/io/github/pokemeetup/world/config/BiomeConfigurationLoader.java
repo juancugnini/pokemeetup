@@ -9,34 +9,67 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class BiomeConfigurationLoader {
     private static final Logger logger = LoggerFactory.getLogger(BiomeConfigurationLoader.class);
 
+    public static class BiomeDefinition {
+        public String name;
+        public String type;
+        public ArrayList<Integer> allowedTileTypes;
+        public HashMap<String,Double> tileDistribution;
+        public ArrayList<String> spawnableObjects;
+        public HashMap<String,Double> spawnChances;
+
+        public BiomeDefinition() {
+            allowedTileTypes = new ArrayList<>();
+            tileDistribution = new HashMap<>();
+            spawnableObjects = new ArrayList<>();
+            spawnChances = new HashMap<>();
+        }
+    }
+
+    public static class BiomeRoot {
+        public ArrayList<BiomeDefinition> biomes = new ArrayList<>();
+    }
+
     public Map<BiomeType, Biome> loadBiomes(String configFilePath) {
         FileHandle file = Gdx.files.internal(configFilePath);
-        if(!file.exists()) {
+        if (!file.exists()) {
             logger.error("Biome config file not found: {}", configFilePath);
             return Collections.emptyMap();
         }
 
         Json json = new Json();
-        BiomeConfig config = json.fromJson(BiomeConfig.class, file.readString());
+        json.setIgnoreUnknownFields(true);
+
+        BiomeRoot root = json.fromJson(BiomeRoot.class, file.readString());
+        if (root == null || root.biomes.isEmpty()) {
+            logger.warn("No biomes found in file: {}", configFilePath);
+            return Collections.emptyMap();
+        }
 
         Map<BiomeType,Biome> biomeMap = new HashMap<>();
-        for (Map.Entry<String, HashMap<String, Integer>> entry: config.getBiomes().entrySet()) {
-            BiomeType type = BiomeType.valueOf(entry.getKey());
-            Map<Integer, Integer> distribution = entry.getValue().entrySet().stream()
-                    .collect(Collectors.toMap(
-                            e -> Integer.valueOf(e.getKey()),
-                            e -> (int)Math.round(((Number)e.getValue()).doubleValue())
-                    ));
+        for (BiomeDefinition def : root.biomes) {
+            BiomeType type = BiomeType.valueOf(def.type);
 
-            Biome biome = new Biome(type, distribution);
+            Map<Integer, Double> distribution = new HashMap<>();
+            for (Map.Entry<String, Double> entry : def.tileDistribution.entrySet()) {
+                distribution.put(Integer.valueOf(entry.getKey()), entry.getValue());
+            }
+
+            Biome biome = new Biome(
+                    type,
+                    def.allowedTileTypes,
+                    distribution,
+                    def.spawnableObjects,
+                    def.spawnChances
+            );
+
             biomeMap.put(type, biome);
         }
 
+        logger.info("Loaded {} biomes from {}", biomeMap.size(), configFilePath);
         return biomeMap;
     }
 }

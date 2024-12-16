@@ -1,51 +1,38 @@
 package io.github.pokemeetup;
 
 import com.badlogic.gdx.Game;
-import com.badlogic.gdx.Gdx;
 import io.github.pokemeetup.screens.GameScreen;
-import io.github.pokemeetup.world.service.TileManager;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ApplicationContext;
-import io.github.pokemeetup.audio.service.AudioService;
-import io.github.pokemeetup.player.service.PlayerAnimationService;
-import io.github.pokemeetup.player.service.PlayerService;
-import io.github.pokemeetup.input.InputService;
-import io.github.pokemeetup.world.service.WorldService;
 
+/**
+ * Main game class that integrates libGDX with Spring Boot.
+ */
 public class GdxGame extends Game {
     private ApplicationContext springContext;
 
-    private AudioService audioService;
-    private PlayerAnimationService playerAnimationService;
-    private PlayerService playerService;
-    private InputService inputService;
-    private WorldService worldService;
-    private TileManager tileManager;
-
+    /**
+     * Initializes the game by setting up Spring context and screen.
+     */
     @Override
     public void create() {
-        
+        // Initialize Spring context
         springContext = SpringApplication.run(PokemeetupApplication.class);
 
-        
-        audioService = springContext.getBean(AudioService.class);
-        playerAnimationService = springContext.getBean(PlayerAnimationService.class);
-        playerService = springContext.getBean(PlayerService.class);
-        inputService = springContext.getBean(InputService.class);
-        worldService = springContext.getBean(WorldService.class);
-        tileManager = springContext.getBean(TileManager.class);
-        setScreen(new GameScreen(playerService,worldService,audioService,tileManager));
+        // Retrieve GameScreen from Spring context
+        GameScreen gameScreen = springContext.getBean(GameScreen.class);
+
+        // Set the active screen
+        setScreen(gameScreen);
     }
 
     @Override
     public void render() {
-        super.render();
-        
+        super.render(); // Delegate to active screen
     }
 
     @Override
     public void dispose() {
-        super.dispose();
-        
+        super.dispose(); // Dispose of active screen and other resources
     }
 }

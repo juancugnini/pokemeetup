@@ -1,23 +1,15 @@
 package io.github.pokemeetup.world.config;
 
+import lombok.Getter;
+
+@Getter
 public class WorldConfig {
-    private long seed;
-    private int chunkSize = 16;
-    private int tileSize = 32;
+    private final long seed;
+    private final int chunkSize = 16;
+    private final int tileSize = 32;
 
     public WorldConfig(long seed) {
         this.seed = seed;
     }
 
-    public long getSeed() {
-        return seed;
-    }
-
-    public int getChunkSize() {
-        return chunkSize;
-    }
-
-    public int getTileSize() {
-        return tileSize;
-    }
 }
