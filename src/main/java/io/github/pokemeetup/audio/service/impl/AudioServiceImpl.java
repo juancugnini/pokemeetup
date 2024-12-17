@@ -38,10 +38,18 @@ public class AudioServiceImpl implements AudioService {
     private float fadeInMusicTimer = 0f;
 
     public AudioServiceImpl() {
+        // Don't initialize audio here!
+        // Gdx is not yet initialized.
+    }
+
+    @Override
+    public void initAudio() {
+        // This method is called after Gdx is ready
         initializeAudio();
     }
 
     private void initializeAudio() {
+        // Load sounds
         for (SoundEffect effect : SoundEffect.values()) {
             try {
                 Sound sound = Gdx.audio.newSound(Gdx.files.internal("assets/" + effect.getPath()));
@@ -75,7 +83,7 @@ public class AudioServiceImpl implements AudioService {
 
     @Override
     public void playMenuMusic() {
-        if (!musicEnabled || menuMusicList.isEmpty()) {
+        if (!musicEnabled || menuMusicList == null || menuMusicList.isEmpty()) {
             return;
         }
 
@@ -101,7 +109,6 @@ public class AudioServiceImpl implements AudioService {
     @Override
     public void stopMenuMusic() {
         if (currentMusic != null && currentMusic.isPlaying()) {
-            
             isFadingOutMusic = true;
             fadeOutMusicTimer = MUSIC_FADE_DURATION;
         }
@@ -172,7 +179,6 @@ public class AudioServiceImpl implements AudioService {
     @Override
     public void setSoundVolume(float soundVolume) {
         this.soundVolume = soundVolume;
-        
     }
 
     @Override
@@ -225,9 +231,11 @@ public class AudioServiceImpl implements AudioService {
             currentMusic = null;
         }
 
-        for (Music music : menuMusicList) {
-            music.dispose();
+        if (menuMusicList != null) {
+            for (Music music : menuMusicList) {
+                music.dispose();
+            }
+            menuMusicList.clear();
         }
-        menuMusicList.clear();
     }
 }

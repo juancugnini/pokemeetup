@@ -1,28 +1,31 @@
 package io.github.pokemeetup.core.screen;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.GL20;
 import io.github.pokemeetup.audio.service.AudioService;
+import io.github.pokemeetup.core.service.ScreenManager;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
 import com.badlogic.gdx.scenes.scene2d.*;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
+import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 
-/**
- * MultiplayerScreen:
- * Allows server owners to configure MOTD, server icon, port/ip, max players, etc.
- * Actual networking logic and saving configs would be handled in a MultiplayerService.
- */
 @Component
 public class MultiplayerScreen implements Screen {
 
     private final AudioService audioService;
+    private final ScreenManager screenManager;
     private Stage stage;
     private Skin skin;
 
-    public MultiplayerScreen(AudioService audioService) {
+    @Autowired
+    public MultiplayerScreen(AudioService audioService, ScreenManager screenManager) {
         this.audioService = audioService;
+        this.screenManager = screenManager;
     }
 
     @Override
@@ -53,7 +56,6 @@ public class MultiplayerScreen implements Screen {
         TextField maxPlayersField = new TextField("20", skin);
         maxPlayersField.setMessageText("Max Players");
 
-        // Server icon configuration might be a path or dropdown
         TextField iconPathField = new TextField("", skin);
         iconPathField.setMessageText("Server Icon Path (optional)");
 
@@ -83,24 +85,27 @@ public class MultiplayerScreen implements Screen {
 
         stage.addActor(root);
 
-        saveButton.addListener(event -> {
-            if (event.toString().equals("touchDown")) {
-                // Extract values, save to MultiplayerService configuration
-                // e.g. multiplayerService.updateServerConfig(motdField.getText(), ipField.getText(), etc.)
+        saveButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                // Future: save these configs via a MultiplayerService
             }
-            return false;
         });
 
-        backButton.addListener(event -> {
-            if (event.toString().equals("touchDown")) {
-                // Return to ModeSelectionScreen or appropriate menu screen
+        backButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                screenManager.goBack();
             }
-            return false;
         });
     }
 
     @Override
     public void render(float delta) {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            screenManager.goBack();
+        }
+
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
         stage.act(delta);
         stage.draw();

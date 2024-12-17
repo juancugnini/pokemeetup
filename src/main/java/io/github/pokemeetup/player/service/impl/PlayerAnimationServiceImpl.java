@@ -25,28 +25,22 @@ public class PlayerAnimationServiceImpl implements PlayerAnimationService {
     private TextureRegion standingUp, standingDown, standingLeft, standingRight;
     private Animation<TextureRegion> walkUp, walkDown, walkLeft, walkRight;
     private Animation<TextureRegion> runUp, runDown, runLeft, runRight;
+    private boolean initialized = false;
 
     /**
      * Constructor initializes animations.
      */
     public PlayerAnimationServiceImpl() {
-        try {
-            logger.info("Initializing PlayerAnimationServiceImpl...");
-            loadAnimations();
-            logger.info("PlayerAnimationServiceImpl initialized successfully.");
-        } catch (Exception e) {
-            logger.error("Failed to initialize PlayerAnimationServiceImpl: {}", e.getMessage());
-            throw e;
-        }
+
     }
 
     /**
      * Retrieves the current animation frame based on player state.
      *
-     * @param direction  Current direction of the player.
-     * @param moving     Whether the player is moving.
-     * @param running    Whether the player is running.
-     * @param stateTime  Time elapsed in the current animation state.
+     * @param direction Current direction of the player.
+     * @param moving    Whether the player is moving.
+     * @param running   Whether the player is running.
+     * @param stateTime Time elapsed in the current animation state.
      * @return Current TextureRegion to render.
      */
     @Override
@@ -121,6 +115,13 @@ public class PlayerAnimationServiceImpl implements PlayerAnimationService {
         runDown = createLoopAnimation(atlas, "boy_run_down", RUN_FRAME_DURATION);
         runLeft = createLoopAnimation(atlas, "boy_run_left", RUN_FRAME_DURATION);
         runRight = createLoopAnimation(atlas, "boy_run_right", RUN_FRAME_DURATION);
+    }
+
+    public void initAnimationsIfNeeded() {
+        if (!initialized) {
+            loadAnimations(); // Now it's safe, assuming Gdx is ready
+            initialized = true;
+        }
     }
 
     /**

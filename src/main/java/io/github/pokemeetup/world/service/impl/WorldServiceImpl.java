@@ -24,38 +24,35 @@ import java.util.Map;
 @Service
 public class WorldServiceImpl implements WorldService {
     private static final Logger logger = LoggerFactory.getLogger(WorldServiceImpl.class);
+    private final WorldConfig worldConfig;
+    private final WorldData worldData = new WorldData();
+    private final WorldGenerator generator;
 
     @Value("${world.saveDir:save/worlds/}")
     private String saveDir;
 
     @Value("${world.defaultSave:save/worldData.json}")
-    private String defaultSaveFile; // fallback path
+    private String defaultSaveFile;
 
-    private final WorldConfig worldConfig;
-    private final WorldData worldData = new WorldData();
-    private final WorldGenerator generator;
+    private boolean initialized = false;
 
     public WorldServiceImpl(WorldConfig worldConfig, WorldGenerator generator) {
         this.worldConfig = worldConfig;
         this.generator = generator;
     }
 
-    @PostConstruct
-    public void init() {
-        initialize();
-    }
-
     @Override
-    public void initialize() {
-        BiomeConfigurationLoader loader = new BiomeConfigurationLoader();
-        Map<BiomeType, Biome> biomes = loader.loadBiomes("assets/config/biomes.json");
-        generator.setBiomes(biomes);
+    public void initIfNeeded() {
+        if (!initialized) {
+            BiomeConfigurationLoader loader = new BiomeConfigurationLoader();
+            Map<BiomeType, Biome> biomes = loader.loadBiomes("assets/config/biomes.json"); // uses Gdx now
+            generator.setBiomes(biomes);
 
-        // Attempt to load a default world data if exists
-        loadWorldData();
-        if (this.worldData.getSeed() == 0) {
-            worldData.setSeed(worldConfig.getSeed());
-            logger.info("Created new world data with seed: {}", worldConfig.getSeed());
+            loadWorldData();
+            if (worldData.getSeed() == 0) {
+                worldData.setSeed(worldConfig.getSeed());
+            }
+            initialized = true;
         }
     }
 
@@ -66,6 +63,12 @@ public class WorldServiceImpl implements WorldService {
 
     @Override
     public void saveWorldData() {
+        FileHandle dir = Gdx.files.local(saveDir);
+        if (!dir.exists()) {
+            dir.mkdirs();
+            logger.info("Created directories for save data at {}", dir.path());
+        }
+
         String targetPath;
         if (worldData.getWorldName() != null && !worldData.getWorldName().isEmpty()) {
             targetPath = saveDir + worldData.getWorldName() + ".json";
@@ -77,8 +80,35 @@ public class WorldServiceImpl implements WorldService {
         String dataStr = json.prettyPrint(worldData);
         FileHandle file = Gdx.files.local(targetPath);
         file.writeString(dataStr, false);
-        logger.info("Saved world data to {}", targetPath);
+        logger.info("Saved world data to {}", file.path());
     }
+
+    @Override
+    public boolean createWorld(String worldName, long seed) {
+        FileHandle dir = Gdx.files.local(saveDir);
+        if (!dir.exists()) {
+            dir.mkdirs();
+            logger.info("Created directories for save data at {}", dir.path());
+        }
+
+        FileHandle file = Gdx.files.local(saveDir + worldName + ".json");
+        if (file.exists()) {
+            logger.warn("World '{}' already exists, cannot create", worldName);
+            return false;
+        }
+
+        WorldData newWorld = new WorldData();
+        newWorld.setWorldName(worldName);
+        newWorld.setSeed(seed);
+
+        Json json = new Json();
+        String dataStr = json.prettyPrint(newWorld);
+        file.writeString(dataStr, false);
+        logger.info("Created and saved new world '{}' with seed {} at {}", worldName, seed, file.path());
+
+        return true;
+    }
+
 
     @Override
     public void loadWorldData() {
@@ -130,7 +160,6 @@ public class WorldServiceImpl implements WorldService {
             dir.mkdirs();
         }
 
-        // Use a lambda that matches FileFilter functional interface
         FileHandle[] files = dir.list(fileHandle -> fileHandle.getName().endsWith(".json"));
         if (files != null) {
             for (FileHandle f : files) {
@@ -168,7 +197,7 @@ public class WorldServiceImpl implements WorldService {
 
         // If the currently loaded world is the one deleted, we might clear it out or re-init
         if (worldData.getWorldName() != null && worldData.getWorldName().equals(worldName)) {
-            // Clear current worldData since we deleted it
+            // Clear current loaded world data
             worldData.setWorldName(null);
             worldData.setSeed(0);
             worldData.getPlayers().clear();
@@ -176,4 +205,5 @@ public class WorldServiceImpl implements WorldService {
             logger.info("Cleared current loaded world data because it was deleted.");
         }
     }
+
 }

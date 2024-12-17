@@ -4,6 +4,7 @@ import io.github.pokemeetup.audio.model.SoundEffect;
 
 public interface AudioService {
 
+    void initAudio();
     
     void playMenuMusic();
     void stopMenuMusic();

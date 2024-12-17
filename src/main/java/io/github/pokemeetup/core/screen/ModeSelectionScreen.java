@@ -3,20 +3,29 @@ package io.github.pokemeetup.core.screen;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.GL20;
-import io.github.pokemeetup.audio.service.AudioService;
-import org.springframework.stereotype.Component;
+import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
+import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
+import io.github.pokemeetup.audio.service.AudioService;
+import io.github.pokemeetup.core.service.ScreenManager;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 @Component
 public class ModeSelectionScreen implements Screen {
+
     private final AudioService audioService;
+    private final ScreenManager screenManager;
+
     private Stage stage;
     private Skin skin;
 
-    public ModeSelectionScreen(AudioService audioService) {
+    @Autowired
+    public ModeSelectionScreen(AudioService audioService, ScreenManager screenManager) {
         this.audioService = audioService;
+        this.screenManager = screenManager;
     }
 
     @Override
@@ -25,8 +34,6 @@ public class ModeSelectionScreen implements Screen {
 
         stage = new Stage(new ScreenViewport());
         Gdx.input.setInputProcessor(stage);
-
-        // Setup UI (using a loaded skin from your UIService)
         skin = new Skin(Gdx.files.internal("assets/Skins/uiskin.json"));
 
         Table root = new Table(skin);
@@ -39,6 +46,7 @@ public class ModeSelectionScreen implements Screen {
         TextButton multiplayerButton = new TextButton("Multiplayer", skin);
         TextButton exitButton = new TextButton("Exit Game", skin);
 
+        // Layout
         root.add(titleLabel).center().row();
         root.add(versionLabel).center().padBottom(30).row();
         root.add(singlePlayerButton).expandX().fillX().pad(10).row();
@@ -47,42 +55,47 @@ public class ModeSelectionScreen implements Screen {
 
         stage.addActor(root);
 
-        singlePlayerButton.addListener(event -> {
-            if (event.toString().equals("touchDown")) {
-                // Navigate to WorldSelectionScreen
-                // Use a ScreenManager or context to switch screens
-                // e.g., YourAppContext.getScreenManager().setScreen(WorldSelectionScreen.class);
+        // Use ClickListener to handle button clicks
+        singlePlayerButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                screenManager.showScreen(WorldSelectionScreen.class);
             }
-            return false;
         });
 
-        multiplayerButton.addListener(event -> {
-            if (event.toString().equals("touchDown")) {
-                // Navigate to MultiplayerScreen
-                // e.g., YourAppContext.getScreenManager().setScreen(MultiplayerScreen.class);
+        multiplayerButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                screenManager.showScreen(MultiplayerScreen.class);
             }
-            return false;
         });
 
-        exitButton.addListener(event -> {
-            if (event.toString().equals("touchDown")) {
+        exitButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
                 Gdx.app.exit();
             }
-            return false;
         });
     }
 
     @Override
     public void render(float delta) {
+        Gdx.gl.glClearColor(0, 0, 0, 1); // Ensure background is cleared
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
         stage.act(delta);
         stage.draw();
     }
 
-    // Other methods required by Screen
-    @Override public void resize(int width, int height) { stage.getViewport().update(width, height, true); }
+    @Override public void resize(int width, int height) {
+        stage.getViewport().update(width, height, true);
+    }
     @Override public void pause() {}
     @Override public void resume() {}
-    @Override public void hide() { audioService.stopMenuMusic(); }
-    @Override public void dispose() { stage.dispose(); skin.dispose(); }
+    @Override public void hide() {
+        audioService.stopMenuMusic();
+    }
+    @Override public void dispose() {
+        stage.dispose();
+        skin.dispose();
+    }
 }

@@ -6,9 +6,10 @@ import io.github.pokemeetup.world.model.WorldData;
 import java.util.List;
 
 public interface WorldService {
-    void initialize();
+    void initIfNeeded();
     WorldData getWorldData();
     void saveWorldData();
+    boolean createWorld(String worldName, long seed);
     void loadWorldData();
 
     int[][] getChunkTiles(int chunkX, int chunkY);

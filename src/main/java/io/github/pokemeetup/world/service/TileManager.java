@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
 import java.util.HashMap;
+import java.util.Map;
 
 @Component
 public class TileManager {
@@ -24,26 +25,25 @@ public class TileManager {
     private final HashMap<Integer, TileConfig.TileDefinition> tiles = new HashMap<>();
     private TextureAtlas atlas;
 
-    @PostConstruct
-    public void init() {
-        loadConfig(tileConfigFile);
-        
-        atlas = new TextureAtlas(Gdx.files.internal("assets/atlas/tiles-gfx-atlas"));
-        logger.info("Loaded tile atlas with {} regions.", atlas.getRegions().size);
+
+    private boolean initialized = false;
+
+    public void initIfNeeded() {
+        if (!initialized) {
+            loadConfig(tileConfigFile);
+            atlas = new TextureAtlas(Gdx.files.internal("assets/atlas/tiles-gfx-atlas"));
+            initialized = true;
+            logger.info("TileManager initialized after Gdx is ready");
+        }
     }
 
     private void loadConfig(String tileConfigFile) {
         FileHandle file = Gdx.files.internal(tileConfigFile);
-        if(!file.exists()) {
-            logger.error("Tile config file not found: {}", tileConfigFile);
-            return;
-        }
         Json json = new Json();
         TileConfig config = json.fromJson(TileConfig.class, file.readString());
         for (TileConfig.TileDefinition def : config.getTiles()) {
             tiles.put(def.getId(), def);
         }
-        logger.info("Loaded {} tiles from config.", tiles.size());
     }
 
     
