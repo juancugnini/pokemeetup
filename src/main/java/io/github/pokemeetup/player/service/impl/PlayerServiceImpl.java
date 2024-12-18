@@ -9,6 +9,7 @@ import io.github.pokemeetup.player.service.PlayerAnimationService;
 import io.github.pokemeetup.player.service.PlayerService;
 import io.github.pokemeetup.input.InputService;
 import io.github.pokemeetup.player.config.PlayerProperties;
+import io.github.pokemeetup.world.service.WorldService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,6 +18,7 @@ public class PlayerServiceImpl implements PlayerService {
 
     private final PlayerModel playerModel;
     private final PlayerAnimationService animationService;
+    private final WorldService worldService;
     private final String username;
 
     // Durations for walking/running a single tile
@@ -27,12 +29,12 @@ public class PlayerServiceImpl implements PlayerService {
 
     // To allow buffering next direction if pressed mid-step
     private PlayerDirection bufferedDirection = null;
-    private static final float SMOOTHING_THRESHOLD = 0.7f;
 
     public PlayerServiceImpl(
             PlayerAnimationService animationService,
             InputService inputService,
-            PlayerProperties playerProperties
+            PlayerProperties playerProperties,
+            WorldService worldService
     ) {
         this.playerModel = new PlayerModel(0, 0);
         this.animationService = animationService;
@@ -41,12 +43,13 @@ public class PlayerServiceImpl implements PlayerService {
         this.walkStepDuration = playerProperties.getWalkStepDuration();
         this.runStepDuration = playerProperties.getRunStepDuration();
         this.playerModel.setRunning(false);
+        this.worldService = worldService;
     }
 
     @Override
     public void move(PlayerDirection direction) {
         if (playerModel.isMoving()) {
-            // If already moving, we can buffer the input to move again in that direction after finishing.
+            // If already moving, buffer next direction
             logger.debug("Currently moving. Buffering direction: {}", direction);
             this.bufferedDirection = direction;
             return;
@@ -69,8 +72,7 @@ public class PlayerServiceImpl implements PlayerService {
             case RIGHT -> targetX += tileSize;
         }
 
-        // Here you would check collision with the world. If not passable, return.
-        // if (!world.isPassable(tile coords)) { return; }
+        // Collision checks would be here if needed
 
         playerModel.setStartPosition(currentX, currentY);
         playerModel.setTargetPosition(targetX, targetY);
@@ -82,8 +84,7 @@ public class PlayerServiceImpl implements PlayerService {
         playerModel.setMovementTime(0f);
         playerModel.setMoving(true);
 
-        logger.debug("Initiated movement: Direction={}, Target=({}, {}), Duration={}",
-                direction, targetX, targetY, duration);
+        logger.debug("Initiated movement: {}, Target=({}, {}), Duration={}", direction, targetX, targetY, duration);
     }
 
     @Override
@@ -91,11 +92,9 @@ public class PlayerServiceImpl implements PlayerService {
         playerModel.setStateTime(playerModel.getStateTime() + delta);
 
         if (playerModel.isMoving()) {
-            // Progress from 0 to 1
             float progress = playerModel.getMovementTime() / playerModel.getMovementDuration();
             progress = Math.min(progress + (delta / playerModel.getMovementDuration()), 1f);
 
-            // Use smoothstep to reduce robotic feeling
             float smoothed = smoothstep(progress);
 
             float newX = lerp(playerModel.getStartPosition().x, playerModel.getTargetPosition().x, smoothed);
@@ -105,18 +104,29 @@ public class PlayerServiceImpl implements PlayerService {
             playerModel.setMovementTime(playerModel.getMovementTime() + delta);
 
             if (progress >= 1f) {
-                // Movement finished this step
+                // Movement finished
                 playerModel.setMoving(false);
                 playerModel.setPosition(playerModel.getTargetPosition().x, playerModel.getTargetPosition().y);
+
+                // Update player data in world
+                worldService.setPlayerData(getPlayerData());
 
                 // If we had a buffered direction, move immediately in that direction
                 if (bufferedDirection != null) {
                     PlayerDirection nextDir = bufferedDirection;
                     bufferedDirection = null;
                     move(nextDir);
+                } else {
+                    // No buffered direction, check if the player is still holding a direction
+                    PlayerDirection dir = inputService.getCurrentDirection();
+                    if (dir != null) {
+                        move(dir);
+                    } else {
+                        // Standing still
+                        playerModel.setMoving(false);
+                        playerModel.setRunning(false);
+                    }
                 }
-            } else {
-                // Still moving, no buffered logic here
             }
         } else {
             // Not moving, check if direction is pressed
@@ -124,7 +134,6 @@ public class PlayerServiceImpl implements PlayerService {
             if (dir != null) {
                 move(dir);
             } else {
-                // Standing still
                 playerModel.setMoving(false);
                 playerModel.setRunning(false);
             }
@@ -135,13 +144,8 @@ public class PlayerServiceImpl implements PlayerService {
         return a + (b - a) * t;
     }
 
-    /**
-     * A simple smoothstep function: smooth approach from 0 to 1.
-     * This provides a gentle ease-in/ease-out feel.
-     */
     private float smoothstep(float x) {
         x = Math.max(0f, Math.min(x, 1f));
-        // x^2 * (3 - 2x)
         return x * x * (3f - 2f * x);
     }
 
@@ -165,7 +169,6 @@ public class PlayerServiceImpl implements PlayerService {
 
     @Override
     public void setRunning(boolean running) {
-        // If currently moving, this won't change duration mid-step. It's only applied next move.
         playerModel.setRunning(running);
         logger.debug("Set running to {}", running);
     }

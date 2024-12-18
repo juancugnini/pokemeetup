@@ -8,16 +8,23 @@ import java.util.List;
 public interface WorldService {
     void initIfNeeded();
     WorldData getWorldData();
-    void saveWorldData();
+
     boolean createWorld(String worldName, long seed);
+    void loadWorld(String worldName);
+    void saveWorldData();
     void loadWorldData();
 
-    int[][] getChunkTiles(int chunkX, int chunkY);
+    List<String> getAvailableWorlds();
+    void deleteWorld(String worldName);
+
+    // Player management
     void setPlayerData(PlayerData playerData);
     PlayerData getPlayerData(String username);
 
-    List<String> getAvailableWorlds();
-    void loadWorld(String worldName);
+    // Chunk management
+    int[][] getChunkTiles(int chunkX, int chunkY);
+    void regenerateChunk(int chunkX, int chunkY);
 
-    void deleteWorld(String worldName);
+    // New method for generating a world thumbnail
+    void generateWorldThumbnail(String worldName);
 }

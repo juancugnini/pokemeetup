@@ -10,12 +10,15 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.scenes.scene2d.*;
+import com.badlogic.gdx.scenes.scene2d.actions.Actions;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
+import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import io.github.pokemeetup.audio.service.AudioService;
 import io.github.pokemeetup.core.service.ScreenManager;
 import io.github.pokemeetup.input.InputService;
+import io.github.pokemeetup.player.model.PlayerData;
 import io.github.pokemeetup.player.service.PlayerService;
 import io.github.pokemeetup.world.model.WorldObject;
 import io.github.pokemeetup.world.service.TileManager;
@@ -44,15 +47,18 @@ public class GameScreen implements Screen {
     private SpriteBatch batch;
     private BitmapFont font;
 
-    // Pause menu related
+    // Pause menu
     private Stage pauseStage;
     private Skin pauseSkin;
     private Window pauseWindow;
     private boolean paused = false;
 
     // Camera smoothing
-    private float cameraPosX, cameraPosY; // Current camera position
-    private static final float CAMERA_LERP_FACTOR = 0.1f; // Smaller is smoother but slower
+    private float cameraPosX, cameraPosY;
+    private static final float CAMERA_LERP_FACTOR = 0.1f;
+
+    // Overlay behind pause menu
+    private Image overlay;
 
     @Autowired
     public GameScreen(PlayerService playerService,
@@ -84,34 +90,40 @@ public class GameScreen implements Screen {
         font = new BitmapFont();
 
         audioService.playMenuMusic();
-
-        // Set input to the game input service
         Gdx.input.setInputProcessor(inputService);
 
-        // Initialize pause menu UI
         pauseStage = new Stage(new ScreenViewport());
         pauseSkin = new Skin(Gdx.files.internal("assets/Skins/uiskin.json"));
+
+        overlay = new Image(pauseSkin.newDrawable("white", new Color(0,0,0,0.5f)));
+        overlay.setFillParent(true);
+        overlay.setVisible(false);
+        pauseStage.addActor(overlay);
 
         pauseWindow = createPauseWindow();
         pauseWindow.setVisible(false);
         pauseStage.addActor(pauseWindow);
 
-        // Initialize camera position to player's position immediately
-        float playerPixelX = playerService.getPlayerData().getX() * TILE_SIZE + TILE_SIZE / 2f;
-        float playerPixelY = playerService.getPlayerData().getY() * TILE_SIZE + TILE_SIZE / 2f;
-        cameraPosX = playerPixelX;
-        cameraPosY = playerPixelY;
+        // Attempt to get player data
+        PlayerData pData = worldService.getPlayerData(playerService.getPlayerData().getUsername());
+        if (pData == null) {
+            // If no player data found, set a default position
+            playerService.setPosition(0, 0);
+        } else {
+            playerService.setPosition((int)pData.getX(), (int)pData.getY());
+        }
+
+        // Use current player position for camera
+        float px = playerService.getPlayerData().getX() * TILE_SIZE + TILE_SIZE / 2f;
+        float py = playerService.getPlayerData().getY() * TILE_SIZE + TILE_SIZE / 2f;
+        cameraPosX = px;
+        cameraPosY = py;
     }
 
     private Window createPauseWindow() {
         Window window = new Window("Paused", pauseSkin);
-
-        // Make the background semi-transparent to see the world behind
-        // Use the default "window" drawable and tint it
-        window.setColor(1f, 1f, 1f, 0.7f);
-        // Another approach: create a drawable with transparent color
-        // Drawable bg = pauseSkin.newDrawable("white", new Color(0,0,0,0.5f));
-        // window.setBackground(bg);
+        Drawable bg = pauseSkin.newDrawable("white", new Color(0.2f,0.2f,0.2f,0.8f));
+        window.setBackground(bg);
 
         window.setModal(true);
         window.setMovable(false);
@@ -130,8 +142,8 @@ public class GameScreen implements Screen {
         saveButton.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
-                // Save world data
                 worldService.saveWorldData();
+                showSaveFeedback();
             }
         });
 
@@ -153,19 +165,51 @@ public class GameScreen implements Screen {
         table.add(quitButton).row();
 
         window.add(table).pad(20);
+        window.pack();
 
-        // Position will be updated in resize()
         return window;
+    }
+
+    private void showSaveFeedback() {
+        Label savedLabel = new Label("Game Saved!", pauseSkin);
+        savedLabel.setColor(Color.GREEN);
+        savedLabel.setPosition(pauseWindow.getX() + pauseWindow.getWidth()/2f - savedLabel.getPrefWidth()/2f,
+                pauseWindow.getY() + pauseWindow.getHeight() + 10);
+
+        pauseStage.addActor(savedLabel);
+        // Fade out and remove after 1.5s
+        savedLabel.addAction(Actions.sequence(
+                Actions.delay(1.5f),
+                Actions.fadeOut(0.5f),
+                Actions.removeActor()
+        ));
     }
 
     private void togglePause() {
         paused = !paused;
         pauseWindow.setVisible(paused);
+        overlay.setVisible(paused);
         if (paused) {
             Gdx.input.setInputProcessor(pauseStage);
+            centerPauseWindow();
         } else {
             Gdx.input.setInputProcessor(inputService);
         }
+    }
+
+    private void centerPauseWindow() {
+        pauseWindow.pack();
+        float stageWidth = pauseStage.getViewport().getWorldWidth();
+        float stageHeight = pauseStage.getViewport().getWorldHeight();
+
+        if (pauseWindow.getWidth() > stageWidth*0.9f) {
+            pauseWindow.setWidth(stageWidth*0.9f);
+        }
+        if (pauseWindow.getHeight() > stageHeight*0.9f) {
+            pauseWindow.setHeight(stageHeight*0.9f);
+        }
+        pauseWindow.setPosition((stageWidth - pauseWindow.getWidth())/2f,
+                (stageHeight - pauseWindow.getHeight())/2f);
     }
 
     @Override
@@ -177,18 +221,19 @@ public class GameScreen implements Screen {
         Gdx.gl.glClearColor(0, 0, 0, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-        if (!paused) {
-            playerService.update(delta);
-            updateCamera(delta);
+        updateCamera(delta);
 
-            batch.setProjectionMatrix(camera.combined);
-            batch.begin();
-            renderWorld();
-            playerService.render(batch);
-            batch.end();
-        } else {
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+        renderWorld();
+        playerService.render(batch);
+        batch.end();
+
+        if (paused) {
             pauseStage.act(delta);
             pauseStage.draw();
+        } else {
+            playerService.update(delta);
         }
     }
 
@@ -244,7 +289,6 @@ public class GameScreen implements Screen {
         float playerPixelX = playerService.getPlayerData().getX() * TILE_SIZE + TILE_SIZE / 2f;
         float playerPixelY = playerService.getPlayerData().getY() * TILE_SIZE + TILE_SIZE / 2f;
 
-        // Smoothly move camera towards the player
         cameraPosX = lerp(cameraPosX, playerPixelX, CAMERA_LERP_FACTOR);
         cameraPosY = lerp(cameraPosY, playerPixelY, CAMERA_LERP_FACTOR);
 
@@ -264,11 +308,9 @@ public class GameScreen implements Screen {
         camera.update();
         pauseStage.getViewport().update(width, height, true);
 
-        // Re-center pause window after resize
-        pauseWindow.setPosition(
-                (width - pauseWindow.getWidth()) / 2f,
-                (height - pauseWindow.getHeight()) / 2f
-        );
+        if (paused) {
+            centerPauseWindow();
+        }
     }
 
     @Override
@@ -279,7 +321,6 @@ public class GameScreen implements Screen {
 
     @Override
     public void hide() {
-        // When switching away from the game screen, stop menu music
         audioService.stopMenuMusic();
         paused = false;
     }

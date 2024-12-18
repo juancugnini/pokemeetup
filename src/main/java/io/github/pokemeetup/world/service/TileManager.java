@@ -11,9 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import jakarta.annotation.PostConstruct;
 import java.util.HashMap;
-import java.util.Map;
 
 @Component
 public class TileManager {
@@ -24,8 +22,6 @@ public class TileManager {
 
     private final HashMap<Integer, TileConfig.TileDefinition> tiles = new HashMap<>();
     private TextureAtlas atlas;
-
-
     private boolean initialized = false;
 
     public void initIfNeeded() {
@@ -33,7 +29,7 @@ public class TileManager {
             loadConfig(tileConfigFile);
             atlas = new TextureAtlas(Gdx.files.internal("assets/atlas/tiles-gfx-atlas"));
             initialized = true;
-            logger.info("TileManager initialized after Gdx is ready");
+            logger.info("TileManager initialized.");
         }
     }
 
@@ -44,13 +40,17 @@ public class TileManager {
         for (TileConfig.TileDefinition def : config.getTiles()) {
             tiles.put(def.getId(), def);
         }
+        logger.info("Loaded {} tiles from {}", tiles.size(), tileConfigFile);
     }
 
-    
     public TextureRegion getRegionForTile(int tileId) {
         TileConfig.TileDefinition def = tiles.get(tileId);
         if (def == null) {
-            return atlas.findRegion("unknown"); 
+            TextureRegion unknown = atlas.findRegion("unknown");
+            if (unknown == null) {
+                logger.warn("Unknown tile requested and no 'unknown' region found.");
+            }
+            return unknown;
         }
         TextureRegion region = atlas.findRegion(def.getTexture());
         if (region == null) {
@@ -62,7 +62,7 @@ public class TileManager {
 
     public boolean isPassable(int tileId) {
         TileConfig.TileDefinition def = tiles.get(tileId);
-        if (def == null) return false; 
+        if (def == null) return false;
         return def.isPassable();
     }
 

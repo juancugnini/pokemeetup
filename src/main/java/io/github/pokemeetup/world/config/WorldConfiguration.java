@@ -12,7 +12,6 @@ public class WorldConfiguration {
 
     @Bean
     public WorldConfig worldConfig() {
-        // Creates and returns a WorldConfig bean which can be autowired
         return new WorldConfig(seed);
     }
 }

@@ -5,6 +5,7 @@ import io.github.pokemeetup.audio.service.AudioService;
 import io.github.pokemeetup.core.screen.ModeSelectionScreen;
 import io.github.pokemeetup.player.service.PlayerAnimationService;
 import io.github.pokemeetup.world.service.TileManager;
+import io.github.pokemeetup.world.service.WorldObjectManager;
 import io.github.pokemeetup.world.service.WorldService;
 import org.springframework.stereotype.Component;
 
@@ -14,10 +15,12 @@ public class GdxGame extends Game {
     public void create() {
         // LibGDX is now initialized
         TileManager tileManager = PokemeetupApplication.getSpringContext().getBean(TileManager.class);
-        tileManager.initIfNeeded(); // A new method that does Gdx-related loading
+        tileManager.initIfNeeded();
+        WorldObjectManager worldObjectManager = PokemeetupApplication.getSpringContext().getBean(WorldObjectManager.class);
+        worldObjectManager.initialize();
 
         WorldService worldService = PokemeetupApplication.getSpringContext().getBean(WorldService.class);
-        worldService.initIfNeeded(); // Another method to load data using Gdx
+        worldService.initIfNeeded();
         PlayerAnimationService playerAnimationService =
                 PokemeetupApplication.getSpringContext().getBean(PlayerAnimationService.class);
         playerAnimationService.initAnimationsIfNeeded();

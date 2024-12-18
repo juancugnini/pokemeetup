@@ -1,11 +1,15 @@
 package io.github.pokemeetup.player.config;
 
+import lombok.Getter;
+import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
 /**
  * Configuration properties for the player.
  */
+@Setter
+@Getter
 @Configuration
 @ConfigurationProperties(prefix = "player")
 public class PlayerProperties {
@@ -27,27 +31,4 @@ public class PlayerProperties {
 
     // Getters and Setters
 
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
-    }
-
-    public float getWalkStepDuration() {
-        return walkStepDuration;
-    }
-
-    public void setWalkStepDuration(float walkStepDuration) {
-        this.walkStepDuration = walkStepDuration;
-    }
-
-    public float getRunStepDuration() {
-        return runStepDuration;
-    }
-
-    public void setRunStepDuration(float runStepDuration) {
-        this.runStepDuration = runStepDuration;
-    }
 }
