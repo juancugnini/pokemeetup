@@ -1,15 +1,14 @@
 package io.github.pokemeetup.world.service.impl;
 
-import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.files.FileHandle;
-import com.badlogic.gdx.graphics.g2d.TextureAtlas;
-import com.badlogic.gdx.graphics.g2d.TextureRegion;
-import io.github.pokemeetup.world.model.Biome;
+import io.github.pokemeetup.world.biome.model.Biome;
 import io.github.pokemeetup.world.model.ObjectType;
 import io.github.pokemeetup.world.model.WorldObject;
 import io.github.pokemeetup.world.service.WorldObjectManager;
+import lombok.Getter;
+import lombok.Setter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -17,68 +16,53 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 @Service
+@Profile("client")
 public class WorldObjectManagerImpl implements WorldObjectManager {
     private static final Logger logger = LoggerFactory.getLogger(WorldObjectManagerImpl.class);
-    private void rebindTexturesForObjects(List<WorldObject> objects) {
-        for (WorldObject obj : objects) {
-            TextureRegion tex = objectTextures.get(obj.getType());
-            obj.setTexture(tex);
-        }
+
+    private static final int CHUNK_SIZE = 16;
+
+    private final Map<String, List<WorldObject>> objectsByChunk = new ConcurrentHashMap<>();
+
+    @Getter
+    @Setter
+    private boolean singlePlayer = true;
+
+    @Override
+    public void initialize() {
+
+        logger.info("WorldObjectManagerImpl initialized. singlePlayer={}", singlePlayer);
     }
 
     @Override
     public void loadObjectsForChunk(int chunkX, int chunkY, List<WorldObject> objects) {
-        String key = chunkX + "," + chunkY;
-        rebindTexturesForObjects(objects);
-        objectsByChunk.put(key, objects);
-    }
-
-    private final Map<String, List<WorldObject>> objectsByChunk = new ConcurrentHashMap<>();
-    private TextureAtlas atlas;
-    private final Map<ObjectType, TextureRegion> objectTextures = new HashMap<>();
-
-    @Override
-    public void initialize() {
-        if (atlas == null) {
-            FileHandle atlasFile = Gdx.files.internal("assets/atlas/tiles-gfx-atlas");
-            atlas = new TextureAtlas(atlasFile);
-            loadTextures();
+        if (objects == null) {
+            objects = Collections.emptyList();
         }
-    }
-
-    private void loadTextures() {
-        objectTextures.put(ObjectType.TREE_0, atlas.findRegion("tree_0"));
-        objectTextures.put(ObjectType.TREE_1, atlas.findRegion("tree_1"));
-        objectTextures.put(ObjectType.CACTUS, atlas.findRegion("cactus"));
-        objectTextures.put(ObjectType.BUSH, atlas.findRegion("bush"));
-        objectTextures.put(ObjectType.SUNFLOWER, atlas.findRegion("sunflower"));
-        objectTextures.put(ObjectType.APRICORN_TREE, atlas.findRegion("apricorn_tree"));
-        objectTextures.put(ObjectType.DEAD_TREE, atlas.findRegion("dead_tree"));
-        logger.info("WorldObject textures loaded successfully.");
+        String key = chunkX + "," + chunkY;
+        objectsByChunk.put(key, objects);
+        logger.debug("Loaded {} objects for chunk {}", objects.size(), key);
     }
 
     @Override
     public List<WorldObject> generateObjectsForChunk(int chunkX, int chunkY, int[][] tiles, Biome biome, long seed) {
-        String key = chunkX + "," + chunkY;
-
-        if (biome == null || biome.getSpawnableObjects().isEmpty()) {
-            objectsByChunk.put(key, Collections.emptyList());
-            return Collections.emptyList();
-        }
 
         List<WorldObject> objects = new CopyOnWriteArrayList<>();
+        if (biome == null) {
+            String key = chunkX + "," + chunkY;
+            objectsByChunk.put(key, objects);
+            return objects;
+        }
 
-        // Deterministic random
         Random random = new Random((chunkX * 341L + chunkY * 773L) ^ seed);
-
         int chunkSize = tiles.length;
 
         for (String objName : biome.getSpawnableObjects()) {
             ObjectType type;
             try {
                 type = ObjectType.valueOf(objName);
-            } catch (IllegalArgumentException e) {
-                logger.warn("Unknown object type: {} in biome {}", objName, biome.getType());
+            } catch (Exception e) {
+                logger.warn("Unknown object type: '{}' in biome '{}'", objName, biome.getType());
                 continue;
             }
 
@@ -94,31 +78,36 @@ public class WorldObjectManagerImpl implements WorldObjectManager {
                     continue;
                 }
 
-                if (canPlaceObject(objects, chunkX, chunkY, lx, ly)) {
-                    TextureRegion tex = objectTextures.get(type);
-                    if (tex == null) {
-                        continue;
-                    }
+                if (canPlaceObject(objects, chunkX, chunkY, lx, ly, type)) {
+                    int worldX = chunkX * CHUNK_SIZE + lx;
+                    int worldY = chunkY * CHUNK_SIZE + ly;
 
-                    int worldX = chunkX * chunkSize + lx;
-                    int worldY = chunkY * chunkSize + ly;
-                    WorldObject obj = new WorldObject(worldX, worldY, type, tex);
+                    WorldObject obj = new WorldObject(worldX, worldY, type, type.isCollidable());
                     objects.add(obj);
                 }
             }
         }
 
+        String key = chunkX + "," + chunkY;
         objectsByChunk.put(key, objects);
-        logger.info("Generated {} objects for chunk {},{} using biome {}", objects.size(), chunkX, chunkY, biome.getType());
+        logger.info("Generated {} objects for chunk {},{} using biome '{}'", objects.size(), chunkX, chunkY, biome.getType());
         return objects;
     }
 
-    private boolean canPlaceObject(List<WorldObject> currentObjects, int chunkX, int chunkY, int lx, int ly) {
-        int worldX = chunkX * 16 + lx; // assuming chunk size=16
-        int worldY = chunkY * 16 + ly;
-        for (WorldObject obj : currentObjects) {
-            if (obj.getTileX() == worldX && obj.getTileY() == worldY) {
-                return false;
+    private boolean canPlaceObject(List<WorldObject> currentObjects, int chunkX, int chunkY, int lx, int ly, ObjectType newType) {
+        int worldX = chunkX * CHUNK_SIZE + lx;
+        int worldY = chunkY * CHUNK_SIZE + ly;
+
+        int minDistance = 3;
+        if (newType.name().contains("TREE")) {
+            for (WorldObject obj : currentObjects) {
+                if (obj.getType().name().contains("TREE")) {
+                    int dx = obj.getTileX() - worldX;
+                    int dy = obj.getTileY() - worldY;
+                    if (dx * dx + dy * dy < minDistance * minDistance) {
+                        return false;
+                    }
+                }
             }
         }
         return true;
@@ -132,16 +121,22 @@ public class WorldObjectManagerImpl implements WorldObjectManager {
 
     @Override
     public void addObject(WorldObject object) {
-        int chunkX = object.getTileX() / 16; // assuming chunk size=16
-        int chunkY = object.getTileY() / 16;
+        int chunkX = object.getTileX() / CHUNK_SIZE;
+        int chunkY = object.getTileY() / CHUNK_SIZE;
         String key = chunkX + "," + chunkY;
         objectsByChunk.computeIfAbsent(key, k -> new CopyOnWriteArrayList<>()).add(object);
+        logger.debug("Added object {} to chunk {}", object.getId(), key);
     }
 
     @Override
     public void removeObject(String objectId) {
-        for (List<WorldObject> objs : objectsByChunk.values()) {
-            objs.removeIf(o -> o.getId().equals(objectId));
+        for (Map.Entry<String, List<WorldObject>> entry : objectsByChunk.entrySet()) {
+            List<WorldObject> objs = entry.getValue();
+            boolean removed = objs.removeIf(o -> o.getId().equals(objectId));
+            if (removed) {
+                logger.debug("Removed object {} from chunk {}", objectId, entry.getKey());
+                break;
+            }
         }
     }
 }

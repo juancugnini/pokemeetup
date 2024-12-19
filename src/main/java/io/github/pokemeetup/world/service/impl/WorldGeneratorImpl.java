@@ -2,9 +2,9 @@ package io.github.pokemeetup.world.service.impl;
 
 import com.badlogic.gdx.math.MathUtils;
 import io.github.pokemeetup.utils.OpenSimplex2;
+import io.github.pokemeetup.world.biome.model.BiomeType;
 import io.github.pokemeetup.world.config.WorldConfig;
-import io.github.pokemeetup.world.model.Biome;
-import io.github.pokemeetup.world.model.BiomeType;
+import io.github.pokemeetup.world.biome.model.Biome;
 import io.github.pokemeetup.world.service.WorldGenerator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -48,16 +48,16 @@ public class WorldGeneratorImpl implements WorldGenerator {
 
         int[][] tiles = new int[chunkSize][chunkSize];
         if (biome == null) {
-            // Default to grass
+
             for (int x = 0; x < chunkSize; x++) {
                 for (int y = 0; y < chunkSize; y++) {
-                    tiles[x][y] = 1; // grass tile
+                    tiles[x][y] = 1;
                 }
             }
             return tiles;
         }
 
-        // Weighted tile selection
+
         double total = biome.getTileDistribution().values().stream().mapToDouble(Double::doubleValue).sum();
 
         for (int x = 0; x < chunkSize; x++) {

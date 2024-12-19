@@ -1,335 +1,437 @@
 package io.github.pokemeetup.core.screen;
 
-import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.Input;
-import com.badlogic.gdx.Screen;
+import com.badlogic.gdx.*;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.NinePatch;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.scenes.scene2d.*;
-import com.badlogic.gdx.scenes.scene2d.actions.Actions;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
-import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
-import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
+import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import io.github.pokemeetup.audio.service.AudioService;
+import io.github.pokemeetup.chat.service.ChatService;
+import io.github.pokemeetup.chat.ui.ChatTable;
 import io.github.pokemeetup.core.service.ScreenManager;
 import io.github.pokemeetup.input.InputService;
+import io.github.pokemeetup.multiplayer.model.PlayerSyncData;
+import io.github.pokemeetup.multiplayer.service.MultiplayerClient;
 import io.github.pokemeetup.player.model.PlayerData;
+import io.github.pokemeetup.player.model.PlayerDirection;
+import io.github.pokemeetup.player.service.PlayerAnimationService;
 import io.github.pokemeetup.player.service.PlayerService;
-import io.github.pokemeetup.world.model.WorldObject;
-import io.github.pokemeetup.world.service.TileManager;
-import io.github.pokemeetup.world.service.WorldObjectManager;
+import io.github.pokemeetup.world.biome.service.BiomeService;
+import io.github.pokemeetup.world.model.WorldRenderer;
+import io.github.pokemeetup.world.service.ChunkLoaderService;
+import io.github.pokemeetup.world.service.ChunkPreloaderService;
 import io.github.pokemeetup.world.service.WorldService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
+import java.util.Map;
 
 @Component
+@Slf4j
 public class GameScreen implements Screen {
-
     private static final float TARGET_VIEWPORT_WIDTH_TILES = 24f;
     private static final int TILE_SIZE = 32;
-
+    private static final float CAMERA_LERP_FACTOR = 0.1f;
     private final PlayerService playerService;
     private final WorldService worldService;
     private final AudioService audioService;
     private final InputService inputService;
-    private final TileManager tileManager;
-    private final WorldObjectManager worldObjectManager;
+    private final ChatService chatService;
+    private final BiomeService biomeService;
+    private final WorldRenderer worldRenderer;
+    private final ChunkLoaderService chunkLoaderService;
     private final ScreenManager screenManager;
-
+    private final ChunkPreloaderService chunkPreloaderService;
+    private final MultiplayerClient multiplayerClient;
+    private final PlayerAnimationService animationService;
     private OrthographicCamera camera;
     private SpriteBatch batch;
     private BitmapFont font;
-
-    // Pause menu
     private Stage pauseStage;
     private Skin pauseSkin;
-    private Window pauseWindow;
+    private Stage hudStage;
+    private Skin hudSkin;
+    private ChatTable chatTable;
+    private boolean showDebug = false;
     private boolean paused = false;
-
-    // Camera smoothing
     private float cameraPosX, cameraPosY;
-    private static final float CAMERA_LERP_FACTOR = 0.1f;
-
-    // Overlay behind pause menu
-    private Image overlay;
+    private Image pauseOverlay;
+    private InputMultiplexer multiplexer;
+    private float otherPlayersStateTime = 0f;
 
     @Autowired
     public GameScreen(PlayerService playerService,
                       WorldService worldService,
                       AudioService audioService,
-                      TileManager tileManager,
-                      WorldObjectManager worldObjectManager,
                       InputService inputService,
-                      ScreenManager screenManager) {
+                      ScreenManager screenManager,
+                      ChatService chatService,
+                      BiomeService biomeService,
+                      WorldRenderer worldRenderer,
+                      ChunkLoaderService chunkLoaderService,
+                      ChunkPreloaderService chunkPreloaderService, PlayerAnimationService animationService, MultiplayerClient client) {
         this.playerService = playerService;
         this.worldService = worldService;
         this.audioService = audioService;
-        this.tileManager = tileManager;
-        this.worldObjectManager = worldObjectManager;
         this.inputService = inputService;
+        this.animationService = animationService;
+        this.chatService = chatService;
         this.screenManager = screenManager;
+        this.biomeService = biomeService;
+        this.worldRenderer = worldRenderer;
+        this.chunkLoaderService = chunkLoaderService;
+        this.multiplayerClient = client;
+        this.chunkPreloaderService = chunkPreloaderService;
     }
 
     @Override
     public void show() {
+        if (worldRenderer != null) {
+            worldRenderer.initialize();
+        }
+
         float baseWidth = TARGET_VIEWPORT_WIDTH_TILES * TILE_SIZE;
-        float aspect = (float) Gdx.graphics.getHeight() / Gdx.graphics.getWidth();
+        float aspect = (float) Gdx.graphics.getHeight() / (float) Gdx.graphics.getWidth();
         float baseHeight = baseWidth * aspect;
 
         camera = new OrthographicCamera();
         camera.setToOrtho(false, baseWidth, baseHeight);
+        worldService.setCamera(camera);
 
         batch = new SpriteBatch();
         font = new BitmapFont();
 
         audioService.playMenuMusic();
-        Gdx.input.setInputProcessor(inputService);
+        initializeUI();
+        initializePlayerPosition();
+    }
 
+    private void initializeUI() {
         pauseStage = new Stage(new ScreenViewport());
         pauseSkin = new Skin(Gdx.files.internal("assets/Skins/uiskin.json"));
 
-        overlay = new Image(pauseSkin.newDrawable("white", new Color(0,0,0,0.5f)));
-        overlay.setFillParent(true);
-        overlay.setVisible(false);
-        pauseStage.addActor(overlay);
+        pauseOverlay = new Image(new NinePatch(pauseSkin.getSprite("white"), 0, 0, 0, 0));
+        pauseOverlay.setColor(new Color(0, 0, 0, 0.6f));
+        pauseOverlay.setFillParent(true);
+        pauseOverlay.setVisible(false);
+        pauseStage.addActor(pauseOverlay);
 
-        pauseWindow = createPauseWindow();
+        setupPauseMenu();
+
+        hudStage = new Stage(new ScreenViewport());
+        hudSkin = new Skin(Gdx.files.internal("assets/Skins/uiskin.json"));
+
+        chatTable = new ChatTable(hudSkin, chatService);
+        chatTable.setPosition(10, Gdx.graphics.getHeight() - 210);
+        chatTable.setSize(400, 200);
+        hudStage.addActor(chatTable);
+
+        multiplexer = new InputMultiplexer();
+        multiplexer.addProcessor(hudStage);
+        multiplexer.addProcessor(inputService);
+
+        Gdx.input.setInputProcessor(multiplexer);
+    }
+
+    private void setupPauseMenu() {
+        Window.WindowStyle windowStyle = new Window.WindowStyle();
+        windowStyle.titleFont = pauseSkin.getFont("default-font");
+        windowStyle.titleFontColor = Color.WHITE;
+        windowStyle.background = pauseSkin.newDrawable("white", new Color(0, 0, 0, 0.7f));
+
+        Window pauseWindow = new Window("Paused", windowStyle);
+        pauseWindow.setModal(true);
+        pauseWindow.setMovable(false);
+
+        TextButton resumeButton = new TextButton("Resume", pauseSkin);
+        TextButton settingsButton = new TextButton("Settings", pauseSkin);
+        TextButton exitButton = new TextButton("Exit to Menu", pauseSkin);
+
+        resumeButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                togglePause();
+            }
+        });
+
+        settingsButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                screenManager.showScreen(SettingsScreen.class);
+            }
+        });
+
+        exitButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                screenManager.showScreen(ModeSelectionScreen.class);
+            }
+        });
+
+        pauseWindow.row().pad(10);
+        pauseWindow.add(resumeButton).width(180).height(40).pad(5).row();
+        pauseWindow.add(settingsButton).width(180).height(40).pad(5).row();
+        pauseWindow.add(exitButton).width(180).height(40).pad(5).row();
+
+        pauseWindow.pack();
+        pauseWindow.setPosition(
+                (pauseStage.getViewport().getWorldWidth() - pauseWindow.getWidth()) / 2f,
+                (pauseStage.getViewport().getWorldHeight() - pauseWindow.getHeight()) / 2f
+        );
         pauseWindow.setVisible(false);
-        pauseStage.addActor(pauseWindow);
 
-        // Attempt to get player data
+        pauseStage.addActor(pauseWindow);
+        pauseOverlay.setUserObject(pauseWindow);
+    }
+
+    private void togglePause() {
+        paused = !paused;
+        Window pauseWindow = (Window) pauseOverlay.getUserObject();
+        pauseOverlay.setVisible(paused);
+        pauseWindow.setVisible(paused);
+
+        if (paused) {
+            multiplexer.addProcessor(0, pauseStage);
+
+
+            worldService.saveWorldData();
+        } else {
+            multiplexer.removeProcessor(pauseStage);
+        }
+    }
+
+    private void initializePlayerPosition() {
         PlayerData pData = worldService.getPlayerData(playerService.getPlayerData().getUsername());
         if (pData == null) {
-            // If no player data found, set a default position
             playerService.setPosition(0, 0);
         } else {
-            playerService.setPosition((int)pData.getX(), (int)pData.getY());
+            playerService.setPosition((int) pData.getX(), (int) pData.getY());
         }
 
-        // Use current player position for camera
         float px = playerService.getPlayerData().getX() * TILE_SIZE + TILE_SIZE / 2f;
         float py = playerService.getPlayerData().getY() * TILE_SIZE + TILE_SIZE / 2f;
         cameraPosX = px;
         cameraPosY = py;
     }
 
-    private Window createPauseWindow() {
-        Window window = new Window("Paused", pauseSkin);
-        Drawable bg = pauseSkin.newDrawable("white", new Color(0.2f,0.2f,0.2f,0.8f));
-        window.setBackground(bg);
-
-        window.setModal(true);
-        window.setMovable(false);
-
-        TextButton resumeButton = new TextButton("Resume", pauseSkin);
-        TextButton saveButton = new TextButton("Save Game", pauseSkin);
-        TextButton quitButton = new TextButton("Quit to Main Menu", pauseSkin);
-
-        resumeButton.addListener(new ChangeListener() {
-            @Override
-            public void changed(ChangeEvent event, Actor actor) {
-                togglePause();
-            }
-        });
-
-        saveButton.addListener(new ChangeListener() {
-            @Override
-            public void changed(ChangeEvent event, Actor actor) {
-                worldService.saveWorldData();
-                showSaveFeedback();
-            }
-        });
-
-        quitButton.addListener(new ChangeListener() {
-            @Override
-            public void changed(ChangeEvent event, Actor actor) {
-                // Save before quitting
-                worldService.saveWorldData();
-                paused = false;
-                Gdx.input.setInputProcessor(null);
-                screenManager.showScreen(ModeSelectionScreen.class);
-            }
-        });
-
-        Table table = new Table(pauseSkin);
-        table.defaults().pad(10).width(200).height(50);
-        table.add(resumeButton).row();
-        table.add(saveButton).row();
-        table.add(quitButton).row();
-
-        window.add(table).pad(20);
-        window.pack();
-
-        return window;
-    }
-
-    private void showSaveFeedback() {
-        Label savedLabel = new Label("Game Saved!", pauseSkin);
-        savedLabel.setColor(Color.GREEN);
-        savedLabel.setPosition(pauseWindow.getX() + pauseWindow.getWidth()/2f - savedLabel.getPrefWidth()/2f,
-                pauseWindow.getY() + pauseWindow.getHeight() + 10);
-
-        pauseStage.addActor(savedLabel);
-        // Fade out and remove after 1.5s
-        savedLabel.addAction(Actions.sequence(
-                Actions.delay(1.5f),
-                Actions.fadeOut(0.5f),
-                Actions.removeActor()
-        ));
-    }
-
-    private void togglePause() {
-        paused = !paused;
-        pauseWindow.setVisible(paused);
-        overlay.setVisible(paused);
-        if (paused) {
-            Gdx.input.setInputProcessor(pauseStage);
-            centerPauseWindow();
-        } else {
-            Gdx.input.setInputProcessor(inputService);
-        }
-    }
-
-    private void centerPauseWindow() {
-        pauseWindow.pack();
-        float stageWidth = pauseStage.getViewport().getWorldWidth();
-        float stageHeight = pauseStage.getViewport().getWorldHeight();
-
-        if (pauseWindow.getWidth() > stageWidth*0.9f) {
-            pauseWindow.setWidth(stageWidth*0.9f);
-        }
-        if (pauseWindow.getHeight() > stageHeight*0.9f) {
-            pauseWindow.setHeight(stageHeight*0.9f);
-        }
-        pauseWindow.setPosition((stageWidth - pauseWindow.getWidth())/2f,
-                (stageHeight - pauseWindow.getHeight())/2f);
-    }
-
     @Override
     public void render(float delta) {
-        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
-            togglePause();
+        handleInput();
+        updateGame(delta);
+        preloadChunksAhead();
+        renderGame(delta);
+    }
+
+    private void handleInput() {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F3)) {
+            showDebug = !showDebug;
         }
+
+        if (!chatService.isActive() && Gdx.input.isKeyJustPressed(Input.Keys.T)) {
+            chatTable.activate();
+        }
+
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            if (chatService.isActive()) {
+                chatTable.deactivate();
+            } else {
+                togglePause();
+            }
+        }
+    }
+
+    private void preloadChunksAhead() {
+        PlayerData player = playerService.getPlayerData();
+        float px = player.getX() * TILE_SIZE;
+        float py = player.getY() * TILE_SIZE;
+        chunkPreloaderService.preloadAround(px, py);
+    }
+
+    private void updateGame(float delta) {
+        if (!paused) {
+            PlayerData player = playerService.getPlayerData();
+            updateCamera();
+            chunkLoaderService.updatePlayerPosition(
+                    player.getX() * TILE_SIZE,
+                    player.getY() * TILE_SIZE
+            );
+            playerService.update(delta);
+
+
+            worldService.setPlayerData(playerService.getPlayerData());
+        }
+
+        pauseStage.act(delta);
+        hudStage.act(delta);
+    }
+
+    private void renderGame(float delta) {
+        otherPlayersStateTime += delta;
 
         Gdx.gl.glClearColor(0, 0, 0, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-        updateCamera(delta);
+        worldRenderer.render(camera, delta);
 
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
-        renderWorld();
         playerService.render(batch);
+        Map<String, PlayerSyncData> states = multiplayerClient.getPlayerStates();
+        String localUsername = playerService.getPlayerData().getUsername();
+
+        for (Map.Entry<String, PlayerSyncData> entry : states.entrySet()) {
+            String otherUsername = entry.getKey();
+            if (otherUsername.equals(localUsername)) continue; // skip the local player
+
+            PlayerSyncData psd = entry.getValue();
+            float px = psd.getX() * 32; // assuming TILE_SIZE = 32
+            float py = psd.getY() * 32;
+
+            PlayerDirection dir = PlayerDirection.valueOf(psd.getDirection());
+            animationService.initAnimationsIfNeeded();
+            TextureRegion frame = animationService.getCurrentFrame(dir, psd.isMoving(), psd.isRunning(), otherPlayersStateTime);
+            batch.draw(frame, px, py);
+        }
         batch.end();
 
+        worldRenderer.renderTreeTops(delta);
+
         if (paused) {
-            pauseStage.act(delta);
             pauseStage.draw();
-        } else {
-            playerService.update(delta);
+        }
+
+        hudStage.act(delta);
+
+        chatTable.updateMessages();
+
+        hudStage.draw();
+
+        if (showDebug) {
+            renderDebugInfo();
         }
     }
 
-    private void renderWorld() {
-        int playerTileX = (int) (playerService.getPlayerData().getX());
-        int playerTileY = (int) (playerService.getPlayerData().getY());
-        int viewRadius = 24;
-
-        // Render tiles
-        for (int dx = -viewRadius; dx <= viewRadius; dx++) {
-            for (int dy = -viewRadius; dy <= viewRadius; dy++) {
-                int tileX = playerTileX + dx;
-                int tileY = playerTileY + dy;
-                int chunkX = tileX / 16;
-                int chunkY = tileY / 16;
-                int[][] tiles = worldService.getChunkTiles(chunkX, chunkY);
-
-                int localX = Math.floorMod(tileX, 16);
-                int localY = Math.floorMod(tileY, 16);
-                if (tiles != null && localX >= 0 && localX < 16 && localY >= 0 && localY < 16) {
-                    int tileType = tiles[localX][localY];
-                    TextureRegion region = tileManager.getRegionForTile(tileType);
-                    float worldPixelX = tileX * TILE_SIZE;
-                    float worldPixelY = tileY * TILE_SIZE;
-                    batch.draw(region, worldPixelX, worldPixelY, TILE_SIZE, TILE_SIZE);
-                }
-            }
-        }
-
-        // Render world objects
-        for (int dx = -viewRadius; dx <= viewRadius; dx++) {
-            for (int dy = -viewRadius; dy <= viewRadius; dy++) {
-                int tileX = playerTileX + dx;
-                int tileY = playerTileY + dy;
-                int chunkX = tileX / 16;
-                int chunkY = tileY / 16;
-                List<WorldObject> objects = worldObjectManager.getObjectsForChunk(chunkX, chunkY);
-                if (objects != null) {
-                    for (WorldObject obj : objects) {
-                        if (Math.abs(obj.getTileX() - playerTileX) <= viewRadius &&
-                                Math.abs(obj.getTileY() - playerTileY) <= viewRadius) {
-                            if (obj.getTexture() != null) {
-                                batch.draw(obj.getTexture(), obj.getPixelX(), obj.getPixelY());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private void updateCamera(float delta) {
+    private void updateCamera() {
         float playerPixelX = playerService.getPlayerData().getX() * TILE_SIZE + TILE_SIZE / 2f;
         float playerPixelY = playerService.getPlayerData().getY() * TILE_SIZE + TILE_SIZE / 2f;
 
-        cameraPosX = lerp(cameraPosX, playerPixelX, CAMERA_LERP_FACTOR);
-        cameraPosY = lerp(cameraPosY, playerPixelY, CAMERA_LERP_FACTOR);
+        cameraPosX = lerp(cameraPosX, playerPixelX);
+        cameraPosY = lerp(cameraPosY, playerPixelY);
 
         camera.position.set(cameraPosX, cameraPosY, 0);
         camera.update();
     }
 
-    private float lerp(float a, float b, float t) {
-        return a + (b - a) * t;
+    private void renderDebugInfo() {
+        batch.setProjectionMatrix(hudStage.getCamera().combined);
+        batch.begin();
+
+        PlayerData player = playerService.getPlayerData();
+        final int TILE_SIZE = 32;
+        final int CHUNK_SIZE = 16;
+        final int WORLD_WIDTH_TILES = 100000;
+        final int WORLD_HEIGHT_TILES = 100000;
+
+        float pixelX = player.getX() * TILE_SIZE;
+        float pixelY = player.getY() * TILE_SIZE;
+        int tileX = (int) player.getX();
+        int tileY = (int) player.getY();
+        int chunkX = tileX / CHUNK_SIZE;
+        int chunkY = tileY / CHUNK_SIZE;
+        int totalChunksX = WORLD_WIDTH_TILES / CHUNK_SIZE;
+        int totalChunksY = WORLD_HEIGHT_TILES / CHUNK_SIZE;
+
+        font.setColor(Color.WHITE);
+        float y = 25;
+
+        font.draw(batch, "FPS: " + Gdx.graphics.getFramesPerSecond(), 10, y);
+        y += 20;
+        font.draw(batch, String.format("Pixel Pos: (%.1f, %.1f)", pixelX, pixelY), 10, y);
+        y += 20;
+        font.draw(batch, String.format("Tile Pos: (%d, %d)", tileX, tileY), 10, y);
+        y += 20;
+        font.draw(batch, String.format("Chunk Pos: (%d, %d)", chunkX, chunkY), 10, y);
+        y += 20;
+        font.draw(batch, String.format("Total Tiles: %d x %d", WORLD_WIDTH_TILES, WORLD_HEIGHT_TILES), 10, y);
+        y += 20;
+        font.draw(batch, String.format("Total Chunks: %d x %d", totalChunksX, totalChunksY), 10, y);
+        y += 20;
+        font.draw(batch, "Biome: " + getBiomeName(pixelX, pixelY), 10, y);
+        y += 20;
+        font.draw(batch, "Direction: " + player.getDirection(), 10, y);
+        y += 20;
+
+        batch.end();
+    }
+
+    private String getBiomeName(float pixelX, float pixelY) {
+        var biomeResult = biomeService.getBiomeAt(pixelX, pixelY);
+        return biomeResult.getPrimaryBiome() != null ? biomeResult.getPrimaryBiome().getName() : "Unknown";
+    }
+
+    private float lerp(float a, float b) {
+        return a + (b - a) * CAMERA_LERP_FACTOR;
     }
 
     @Override
     public void resize(int width, int height) {
         camera.viewportWidth = TARGET_VIEWPORT_WIDTH_TILES * TILE_SIZE;
-        float aspect = (float) height / width;
-        camera.viewportHeight = camera.viewportWidth * aspect;
+        camera.viewportHeight = camera.viewportWidth * ((float) height / width);
         camera.update();
-        pauseStage.getViewport().update(width, height, true);
 
-        if (paused) {
-            centerPauseWindow();
+        pauseStage.getViewport().update(width, height, true);
+        hudStage.getViewport().update(width, height, true);
+
+        if (chatTable != null) {
+            chatTable.setPosition(10, height - 210);
+        }
+
+        if (pauseOverlay != null && pauseOverlay.isVisible()) {
+            Window pauseWindow = (Window) pauseOverlay.getUserObject();
+            if (pauseWindow != null) {
+                pauseWindow.pack();
+                pauseWindow.setPosition(
+                        (pauseStage.getViewport().getWorldWidth() - pauseWindow.getWidth()) / 2f,
+                        (pauseStage.getViewport().getWorldHeight() - pauseWindow.getHeight()) / 2f
+                );
+            }
         }
     }
 
     @Override
-    public void pause() {}
-
-    @Override
-    public void resume() {}
-
-    @Override
-    public void hide() {
-        audioService.stopMenuMusic();
-        paused = false;
+    public void pause() {
     }
 
     @Override
+    public void resume() {
+    }
+
+    @Override
+    public void hide() {
+    }
+
+
+    @Override
     public void dispose() {
+
+        worldService.saveWorldData();
+
         batch.dispose();
         font.dispose();
         pauseStage.dispose();
+        hudStage.dispose();
         pauseSkin.dispose();
+        hudSkin.dispose();
+        worldRenderer.dispose();
+        chunkLoaderService.dispose();
+        chunkPreloaderService.dispose();
     }
 }

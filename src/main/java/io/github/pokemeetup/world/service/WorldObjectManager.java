@@ -1,6 +1,6 @@
 package io.github.pokemeetup.world.service;
 
-import io.github.pokemeetup.world.model.Biome;
+import io.github.pokemeetup.world.biome.model.Biome;
 import io.github.pokemeetup.world.model.WorldObject;
 
 import java.util.List;

@@ -1,5 +1,8 @@
 package io.github.pokemeetup.audio.model;
 
+import lombok.Getter;
+
+@Getter
 public enum WeatherSoundEffect {
     LIGHT_RAIN("sounds/weather/rain.ogg"),
     THUNDER("sounds/weather/thunder.ogg"),
@@ -12,7 +15,4 @@ public enum WeatherSoundEffect {
         this.path = path;
     }
 
-    public String getPath() {
-        return path;
-    }
 }

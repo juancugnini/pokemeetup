@@ -19,7 +19,7 @@ public class PlayerModel {
     private boolean running;
 
     private float movementTime = 0f;
-    private float movementDuration = 0.2f; // Default duration, can be overridden
+    private float movementDuration = 0.2f;
     private float runSpeedMultiplier = 1.75f;
 
     private float stateTime = 0f;

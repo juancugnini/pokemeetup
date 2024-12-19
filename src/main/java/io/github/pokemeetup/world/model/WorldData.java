@@ -13,8 +13,8 @@ public class WorldData {
     private String worldName;
     @Setter
     private long seed;
-    private Map<String, PlayerData> players = new HashMap<>();
-    private Map<String, ChunkData> chunks = new HashMap<>();
+    private final Map<String, PlayerData> players = new HashMap<>();
+    private final Map<String, ChunkData> chunks = new HashMap<>();
 
     @Setter
     private long createdDate;

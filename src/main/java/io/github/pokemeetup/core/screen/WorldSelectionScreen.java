@@ -7,6 +7,7 @@ import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.scenes.scene2d.*;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
@@ -15,7 +16,6 @@ import com.badlogic.gdx.utils.Scaling;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import io.github.pokemeetup.audio.service.AudioService;
 import io.github.pokemeetup.core.service.ScreenManager;
-import io.github.pokemeetup.player.service.PlayerService;
 import io.github.pokemeetup.world.model.WorldData;
 import io.github.pokemeetup.world.service.WorldService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +25,7 @@ import org.springframework.stereotype.Component;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
+import java.util.Random;
 
 @Component
 public class WorldSelectionScreen implements Screen {
@@ -40,10 +41,14 @@ public class WorldSelectionScreen implements Screen {
     private Table worldListTable;
     private String selectedWorldName;
 
+    private Table infoPanel;
+    private TextButton playButton;
+    private TextButton deleteButton;
+    private float fontScale;
+
     @Autowired
     public WorldSelectionScreen(AudioService audioService,
                                 WorldService worldService,
-                                PlayerService playerService,
                                 ScreenManager screenManager) {
         this.audioService = audioService;
         this.worldService = worldService;
@@ -58,29 +63,88 @@ public class WorldSelectionScreen implements Screen {
         Gdx.input.setInputProcessor(stage);
         skin = new Skin(Gdx.files.internal("assets/Skins/uiskin.json"));
 
-        Table root = new Table(skin);
-        root.setFillParent(true);
+        createUI();
+        refreshWorldList();
+    }
 
-        Label title = new Label("Select World", skin);
-        root.add(title).pad(10).row();
+    private void createUI() {
 
-        refreshWorldListUI(root);
+        float width = Gdx.graphics.getWidth();
+        float height = Gdx.graphics.getHeight();
+
+
+        float maxUIWidth = 1400f;
+        float maxUIHeight = 900f;
+
+
+
+        fontScale = MathUtils.clamp(Math.min(width, height) / 900f, 0.8f, 1.5f);
+
+
+        Table rootContainer = new Table(skin);
+        rootContainer.setFillParent(true);
+        stage.addActor(rootContainer);
+
+
+        rootContainer.setBackground(skin.newDrawable("white", 0.1f,0.1f,0.1f,1f));
+
+
+        Table mainTable = new Table(skin);
+        mainTable.defaults().pad(10 * fontScale);
+        rootContainer.add(mainTable)
+                .width(Math.min(width * 0.9f, maxUIWidth))
+                .height(Math.min(height * 0.9f, maxUIHeight))
+                .center();
+
+
+        Label titleLabel = new Label("Select World", skin);
+        titleLabel.setFontScale(1.5f * fontScale);
+        mainTable.add(titleLabel).colspan(2).padBottom(20 * fontScale).center().row();
+
+
+        worldListTable = new Table(skin);
+        worldListTable.top().defaults().pad(5 * fontScale);
+
+        ScrollPane scrollPane = new ScrollPane(worldListTable, skin);
+        scrollPane.setFadeScrollBars(false);
+        scrollPane.setScrollingDisabled(true, false);
+
+
+        Table worldListContainer = new Table(skin);
+        worldListContainer.setBackground(skin.newDrawable("white", 0.15f,0.15f,0.15f,1f));
+        worldListContainer.add(scrollPane).expand().fill();
+
+        infoPanel = new Table(skin);
+        infoPanel.defaults().left().pad(5 * fontScale);
+        infoPanel.setBackground(skin.newDrawable("white", 0.15f,0.15f,0.15f,1f));
+        infoPanel.add(new Label("Select a world to view details", skin)).expand().fill();
+
+        Table contentTable = new Table(skin);
+        float contentWidth = Math.min((Math.min(width, maxUIWidth)) * 0.9f, 1200f);
+        float infoPanelWidth = Math.min(contentWidth * 0.35f, 350f);
+        float worldListWidth = Math.min(contentWidth * 0.6f, 600f);
+
+        contentTable.add(worldListContainer).expandY().fillY().width(worldListWidth).padRight(20 * fontScale);
+        contentTable.add(infoPanel).expandY().fillY().width(infoPanelWidth);
+
+        mainTable.add(contentTable).colspan(2).expand().fill().row();
+
 
         TextButton createButton = new TextButton("Create New World", skin);
-        TextButton playButton = new TextButton("Play Selected World", skin);
-        TextButton deleteButton = new TextButton("Delete World", skin);
+        playButton = new TextButton("Play Selected World", skin);
+        deleteButton = new TextButton("Delete World", skin);
         TextButton backButton = new TextButton("Back", skin);
 
-        Table buttonTable = new Table(skin);
-        buttonTable.add(createButton).pad(5);
-        buttonTable.add(playButton).pad(5);
-        buttonTable.add(deleteButton).pad(5);
-        buttonTable.row();
-        buttonTable.add(backButton).colspan(3).center().pad(5);
 
-        root.add(buttonTable).padTop(20);
+        createButton.getLabel().setFontScale(fontScale);
+        playButton.getLabel().setFontScale(fontScale);
+        deleteButton.getLabel().setFontScale(fontScale);
+        backButton.getLabel().setFontScale(fontScale);
 
-        stage.addActor(root);
+
+        playButton.setDisabled(true);
+        deleteButton.setDisabled(true);
+
 
         createButton.addListener(new ClickListener() {
             @Override
@@ -114,6 +178,17 @@ public class WorldSelectionScreen implements Screen {
                 screenManager.goBack();
             }
         });
+
+        Table buttonTable = new Table(skin);
+        buttonTable.defaults().pad(10 * fontScale);
+        buttonTable.add(createButton);
+        buttonTable.add(playButton);
+        buttonTable.add(deleteButton);
+        buttonTable.row();
+        buttonTable.add(backButton).colspan(3).center().padTop(10 * fontScale);
+
+        mainTable.row();
+        mainTable.add(buttonTable).colspan(2).padTop(20 * fontScale).center();
     }
 
     private void showDeleteConfirmDialog() {
@@ -122,9 +197,12 @@ public class WorldSelectionScreen implements Screen {
             @Override
             protected void result(Object object) {
                 if ((Boolean) object) {
-                    // User confirmed deletion
+
                     worldService.deleteWorld(selectedWorldName);
                     refreshWorldList();
+                    selectedWorldName = null;
+                    updateInfoPanel(null);
+                    updateButtonsState();
                 }
             }
         };
@@ -146,46 +224,55 @@ public class WorldSelectionScreen implements Screen {
             Texture tex = new Texture(iconFile);
             icon = new Image(new TextureRegion(tex));
         } else {
-            // fallback to a default icon if missing
+
             FileHandle fallbackFile = Gdx.files.internal("assets/icons/default_world_icon.png");
             Texture fallback = new Texture(fallbackFile);
             icon = new Image(new TextureRegion(fallback));
         }
 
         icon.setScaling(Scaling.fit);
-        entry.add(icon).size(64,64).pad(10);
+        float iconSize = 64f * fontScale;
+        entry.add(icon).size(iconSize, iconSize).pad(10 * fontScale);
 
         Table infoTable = new Table(skin);
         Label nameLabel = new Label(worldName, skin);
-        long createdDate = meta.getCreatedDate();
-        long lastPlayed = meta.getLastPlayed();
-        long playedTime = meta.getPlayedTime();
+        nameLabel.setFontScale(fontScale);
 
-        Label createdLabel = new Label("Created: " + formatDate(createdDate), skin);
-        Label lastPlayedLabel = new Label("Last Played: " + formatDate(lastPlayed), skin);
-        Label playedTimeLabel = new Label("Played Time: " + formatPlayedTime(playedTime), skin);
+        Label createdLabel = new Label("Created: " + formatDate(meta.getCreatedDate()), skin);
+        createdLabel.setFontScale(fontScale);
 
-        infoTable.add(nameLabel).row();
+        Label lastPlayedLabel = new Label("Last Played: " + formatDate(meta.getLastPlayed()), skin);
+        lastPlayedLabel.setFontScale(fontScale);
+
+        Label playedTimeLabel = new Label("Played Time: " + formatPlayedTime(meta.getPlayedTime()), skin);
+        playedTimeLabel.setFontScale(fontScale);
+
+        infoTable.add(nameLabel).left().row();
         infoTable.add(createdLabel).left().row();
         infoTable.add(lastPlayedLabel).left().row();
         infoTable.add(playedTimeLabel).left().row();
 
-        entry.add(infoTable).expand().fill().pad(10);
+        entry.add(infoTable).expand().fill().pad(10 * fontScale);
 
         entry.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 selectedWorldName = worldName;
-                // highlight this entry
-                for (Actor actor : worldListTable.getChildren()) {
-                    if (actor instanceof Table t) {
-                        t.setBackground(skin.newDrawable("white", 0.1f,0.1f,0.1f,1f));
-                    }
-                }
-                entry.setBackground(skin.newDrawable("white", 0.3f,0.6f,1f,1f));
+                highlightSelectedEntry(entry);
+                updateInfoPanel(meta);
+                updateButtonsState();
             }
         });
         return entry;
+    }
+
+    private void highlightSelectedEntry(Table selectedEntry) {
+        for (Actor actor : worldListTable.getChildren()) {
+            if (actor instanceof Table t) {
+                t.setBackground(skin.newDrawable("white", 0.1f,0.1f,0.1f,1f));
+            }
+        }
+        selectedEntry.setBackground(skin.newDrawable("white", 0.3f,0.6f,1f,1f));
     }
 
     private WorldData loadWorldMetadata(String worldName) {
@@ -217,19 +304,6 @@ public class WorldSelectionScreen implements Screen {
         return new SimpleDateFormat("MMM d, yyyy HH:mm").format(new Date(timestamp));
     }
 
-    private void refreshWorldListUI(Table root) {
-        List<String> worldNames = worldService.getAvailableWorlds();
-        worldListTable = new Table(skin);
-
-        for (String worldName : worldNames) {
-            Table entry = createWorldEntry(worldName);
-            worldListTable.add(entry).expandX().fillX().row();
-        }
-
-        ScrollPane scrollPane = new ScrollPane(worldListTable, skin);
-        root.add(scrollPane).expand().fill().row();
-    }
-
     private void refreshWorldList() {
         worldListTable.clear();
         List<String> worldNames = worldService.getAvailableWorlds();
@@ -238,9 +312,15 @@ public class WorldSelectionScreen implements Screen {
             worldListTable.add(entry).expandX().fillX().row();
         }
         selectedWorldName = null;
+        updateButtonsState();
+        updateInfoPanel(null);
     }
 
-    private void showCreateWorldDialog() {
+    private void updateButtonsState() {
+        boolean hasSelection = selectedWorldName != null;
+        playButton.setDisabled(!hasSelection);
+        deleteButton.setDisabled(!hasSelection);
+    }private void showCreateWorldDialog() {
         Dialog dialog = new Dialog("Create New World", skin) {
             @Override
             protected void result(Object object) {
@@ -257,7 +337,7 @@ public class WorldSelectionScreen implements Screen {
                     long seed;
                     String seedText = seedField.getText().trim();
                     if (seedText.isEmpty()) {
-                        seed = System.currentTimeMillis();
+                        seed = new Random().nextLong();
                     } else {
                         try {
                             seed = Long.parseLong(seedText);
@@ -273,28 +353,37 @@ public class WorldSelectionScreen implements Screen {
                         return;
                     }
 
-                    // Generate a proper world thumbnail after creation
+
                     worldService.generateWorldThumbnail(worldName);
 
                     refreshWorldList();
                     selectedWorldName = worldName;
+                    highlightNewlyCreatedEntry(worldName);
+                    updateButtonsState();
+                    updateInfoPanel(loadWorldMetadata(worldName));
                 }
             }
         };
 
-        dialog.getContentTable().pad(10);
+        dialog.getContentTable().pad(10 * fontScale);
 
-        dialog.getContentTable().add(new Label("World Name:", skin)).left().row();
+        Label worldNameLabel = new Label("World Name:", skin);
+        worldNameLabel.setFontScale(fontScale);
+        dialog.getContentTable().add(worldNameLabel).left().row();
+
         TextField nameField = new TextField("", skin);
         nameField.setName("worldNameField");
         nameField.setMessageText("Enter world name");
-        dialog.getContentTable().add(nameField).width(300).padBottom(10).row();
+        dialog.getContentTable().add(nameField).width(300 * fontScale).padBottom(10 * fontScale).row();
 
-        dialog.getContentTable().add(new Label("Seed (optional):", skin)).left().row();
+        Label seedLabel = new Label("Seed (optional):", skin);
+        seedLabel.setFontScale(fontScale);
+        dialog.getContentTable().add(seedLabel).left().row();
+
         TextField seedField = new TextField("", skin);
         seedField.setName("seedField");
         seedField.setMessageText("Enter seed or leave empty");
-        dialog.getContentTable().add(seedField).width(300).padBottom(10).row();
+        dialog.getContentTable().add(seedField).width(300 * fontScale).padBottom(10 * fontScale).row();
 
         dialog.button("Create", true);
         dialog.button("Cancel", false);
@@ -302,6 +391,59 @@ public class WorldSelectionScreen implements Screen {
         dialog.key(Input.Keys.ESCAPE, false);
 
         dialog.show(stage);
+    }
+
+
+    private void highlightNewlyCreatedEntry(String worldName) {
+        for (Actor actor : worldListTable.getChildren()) {
+            if (actor instanceof Table entry) {
+                Label nameLabel = findNameLabel(entry);
+                if (nameLabel != null && worldName.equals(nameLabel.getText().toString())) {
+                    highlightSelectedEntry(entry);
+                    break;
+                }
+            }
+        }
+    }
+
+    private Label findNameLabel(Table entry) {
+        for (Actor child : entry.getChildren()) {
+            if (child instanceof Table infoTable) {
+                for (Actor infoChild : infoTable.getChildren()) {
+                    if (infoChild instanceof Label label) {
+                        return label;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private void updateInfoPanel(WorldData meta) {
+        infoPanel.clear();
+        if (meta == null) {
+            Label prompt = new Label("Select a world to view details", skin);
+            prompt.setFontScale(fontScale);
+            infoPanel.add(prompt).expand().fill();
+            return;
+        }
+
+        infoPanel.defaults().left().pad(5 * fontScale);
+        Label nameLabel = new Label(meta.getWorldName(), skin);
+        nameLabel.setFontScale(1.2f * fontScale);
+        infoPanel.add(nameLabel).expandX().row();
+
+        Label created = new Label("Created: " + formatDate(meta.getCreatedDate()), skin);
+        created.setFontScale(fontScale);
+        infoPanel.add(created).row();
+
+        Label lastPlayed = new Label("Last Played: " + formatDate(meta.getLastPlayed()), skin);
+        lastPlayed.setFontScale(fontScale);
+        infoPanel.add(lastPlayed).row();
+
+        Label playedTime = new Label("Played Time: " + formatPlayedTime(meta.getPlayedTime()), skin);
+        playedTime.setFontScale(fontScale);
+        infoPanel.add(playedTime).row();
     }
 
     private void showErrorDialog(String message) {
@@ -317,16 +459,30 @@ public class WorldSelectionScreen implements Screen {
             screenManager.goBack();
         }
 
+        Gdx.gl.glClearColor(0.15f,0.15f,0.15f,1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
         stage.act(delta);
         stage.draw();
     }
 
-    @Override public void resize(int width, int height) { stage.getViewport().update(width, height, true); }
-    @Override public void pause() {}
-    @Override public void resume() {}
-    @Override public void hide() { audioService.stopMenuMusic(); }
-    @Override public void dispose() {
+    @Override
+    public void resize(int width, int height) {
+        stage.getViewport().update(width, height, true);
+    }
+
+    @Override
+    public void pause() {}
+
+    @Override
+    public void resume() {}
+
+    @Override
+    public void hide() {
+        audioService.stopMenuMusic();
+    }
+
+    @Override
+    public void dispose() {
         stage.dispose();
         skin.dispose();
     }
