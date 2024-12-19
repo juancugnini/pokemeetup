@@ -5,12 +5,14 @@ import com.esotericsoftware.kryonet.Client;
 import com.esotericsoftware.kryonet.Connection;
 import com.esotericsoftware.kryonet.Listener;
 import io.github.pokemeetup.NetworkProtocol;
+import io.github.pokemeetup.chat.service.ChatService;
 import io.github.pokemeetup.multiplayer.model.ChunkUpdate;
 import io.github.pokemeetup.multiplayer.model.PlayerSyncData;
 import io.github.pokemeetup.multiplayer.service.MultiplayerClient;
 import io.github.pokemeetup.world.model.ObjectType;
 import io.github.pokemeetup.world.model.WorldObject;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -22,13 +24,17 @@ import java.util.concurrent.ConcurrentHashMap;
 public class MultiplayerClientImpl implements MultiplayerClient {
     private final Map<String, PlayerSyncData> playerStates = new ConcurrentHashMap<>();
     private final Map<String, ChunkUpdate> loadedChunks = new ConcurrentHashMap<>();
+    private final ChatService chatService;
     private Client client;
     private boolean connected = false;
     private LoginResponseListener loginResponseListener;
     private CreateUserResponseListener createUserResponseListener;
     private Runnable pendingCreateUserRequest = null;
     private Runnable pendingLoginRequest = null;
-    public MultiplayerClientImpl() {
+
+    @Autowired
+    public MultiplayerClientImpl(ChatService chatService) {
+        this.chatService = chatService;
     }
 
     @Override
@@ -211,6 +217,9 @@ public class MultiplayerClientImpl implements MultiplayerClient {
                     }
                 }
             });
+        } else if (object instanceof io.github.pokemeetup.chat.model.ChatMessage chatMsg) { // Add this block
+            log.info("Received ChatMessage from {}: {}", chatMsg.getSender(), chatMsg.getContent());
+            chatService.handleIncomingMessage(chatMsg); // Forward to ChatService
         } else {
             log.warn("Unknown message type received: {}", object.getClass().getName());
         }
