@@ -229,13 +229,14 @@ public class ClientWorldServiceImpl extends BaseWorldServiceImpl implements Worl
     }
 
     private void loadOrGenerateChunk(int chunkX, int chunkY) {
-        String keyString = chunkX + "," + chunkY;
+        String key = chunkX + "," + chunkY;
         ChunkData.ChunkKey cKey = new ChunkData.ChunkKey(chunkX, chunkY);
         Optional<ChunkData> opt = chunkRepository.findById(cKey);
+
         if (opt.isPresent()) {
             ChunkData cData = opt.get();
             worldObjectManager.loadObjectsForChunk(chunkX, chunkY, cData.getObjects());
-            worldData.getChunks().put(keyString, cData);
+            worldData.getChunks().put(key, cData);
             return;
         }
 
@@ -243,12 +244,11 @@ public class ClientWorldServiceImpl extends BaseWorldServiceImpl implements Worl
         ChunkData cData = new ChunkData();
         cData.setKey(cKey);
         cData.setTiles(tiles);
-
         Biome biome = worldGenerator.getBiomeForChunk(chunkX, chunkY);
         List<WorldObject> objs = worldObjectManager.generateObjectsForChunk(chunkX, chunkY, tiles, biome, worldData.getSeed());
         cData.setObjects(objs);
 
-        worldData.getChunks().put(keyString, cData);
+        worldData.getChunks().put(key, cData);
         chunkRepository.save(cData);
     }
 

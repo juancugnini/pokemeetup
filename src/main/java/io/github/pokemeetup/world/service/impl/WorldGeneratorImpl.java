@@ -17,8 +17,6 @@ public class WorldGeneratorImpl implements WorldGenerator {
     private Map<BiomeType, Biome> biomes;
     private final WorldConfig config;
 
-    private static final float NOISE_SCALE = 0.005f;
-
     @Autowired
     public WorldGeneratorImpl(WorldConfig config) {
         this.config = config;
@@ -36,6 +34,7 @@ public class WorldGeneratorImpl implements WorldGenerator {
             return null;
         }
 
+        float NOISE_SCALE = 0.005f;
         float n = OpenSimplex2.noise2(seed, chunkX * NOISE_SCALE, chunkY * NOISE_SCALE);
         BiomeType selectedBiome = n > 0 ? BiomeType.PLAINS : BiomeType.DESERT;
         return biomes.get(selectedBiome);
