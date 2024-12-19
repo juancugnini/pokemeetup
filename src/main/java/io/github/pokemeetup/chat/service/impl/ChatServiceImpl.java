@@ -1,5 +1,6 @@
 package io.github.pokemeetup.chat.service.impl;
 
+import io.github.pokemeetup.chat.event.ChatMessageReceivedEvent;
 import io.github.pokemeetup.chat.model.ChatMessage;
 import io.github.pokemeetup.chat.service.ChatService;
 import io.github.pokemeetup.chat.service.CommandService;
@@ -37,6 +38,10 @@ public class ChatServiceImpl implements ChatService {
         this.commandService = commandService;
     }
 
+    public void onChatMessageReceived(ChatMessageReceivedEvent event) {
+        ChatMessage chatMessage = event.getChatMessage();
+        handleIncomingMessage(chatMessage);
+    }
     @Override
     public void sendMessage(String content) {
         if (content.isEmpty()) return;
