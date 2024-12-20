@@ -174,35 +174,31 @@ public class MultiplayerServerImpl implements MultiplayerServer {
     private void handlePlayerMove(Connection connection, NetworkProtocol.PlayerMoveRequest moveReq) {
         String username = connectionUserMap.get(connection.getID());
         if (username == null) {
-            log.warn("Received PlayerMoveRequest from unregistered connection: {}", connection.getID());
+            log.warn("No user for this connection.");
             return;
         }
 
-        // Directly use the worldService to get and update player data
         PlayerData pd = worldService.getPlayerData(username);
-        if (pd == null) {
-            log.warn("PlayerData not found for username: {}", username);
-            return;
-        }
+        if (pd == null) return;
 
-        // Update player position and state
+        // If position changed, consider player moving:
+        boolean wasDifferent = (pd.getX() != moveReq.getX() || pd.getY() != moveReq.getY());
         pd.setX(moveReq.getX());
         pd.setY(moveReq.getY());
         pd.setWantsToRun(moveReq.isRunning());
-        pd.setMoving(moveReq.isMoving());
-
+        pd.setMoving(wasDifferent); // Set true if player actually moved a tile
         try {
             pd.setDirection(io.github.pokemeetup.player.model.PlayerDirection.valueOf(moveReq.getDirection().toUpperCase()));
         } catch (IllegalArgumentException e) {
-            log.error("Invalid direction '{}' for player '{}'", moveReq.getDirection(), username, e);
+            log.error("Invalid direction '{}'", moveReq.getDirection());
         }
 
-        // Use the worldService directly to persist the updated player data
         worldService.setPlayerData(pd);
 
-        // Broadcast updated player states to all clients
+        // Broadcast updated states right now:
         broadcastPlayerStates();
     }
+
 
     private void broadcastPlayerStates() {
         Map<String, PlayerSyncData> states = multiplayerService.getAllPlayerStates();

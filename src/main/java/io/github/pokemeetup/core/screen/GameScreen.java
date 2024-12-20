@@ -94,6 +94,7 @@ public class GameScreen implements Screen {
 
     @Override
     public void show() {
+        animationService.initAnimationsIfNeeded();
         if (worldRenderer != null) {
             worldRenderer.initialize();
         }

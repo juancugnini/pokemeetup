@@ -63,7 +63,7 @@ public class ClientWorldServiceImpl extends BaseWorldServiceImpl implements Worl
     @Autowired
     @Lazy
     private MultiplayerClient multiplayerClient;
-
+    private boolean isMultiplayerMode = false;
 
     public ClientWorldServiceImpl(WorldConfig worldConfig,
                                   WorldGenerator worldGenerator,
@@ -84,6 +84,10 @@ public class ClientWorldServiceImpl extends BaseWorldServiceImpl implements Worl
         this.worldMetadataRepo = worldMetadataRepo;
         this.chunkRepository = chunkRepository;
         this.playerDataRepository = playerDataRepository;
+    }
+
+    public void setMultiplayerMode(boolean multiplayer) {
+        this.isMultiplayerMode = multiplayer;
     }
 
     @Override
@@ -272,15 +276,19 @@ public class ClientWorldServiceImpl extends BaseWorldServiceImpl implements Worl
     @Override
     public int[][] getChunkTiles(int chunkX, int chunkY) {
         String key = chunkX + "," + chunkY;
-        ChunkData cData = worldData.getChunks().get(key);
-        // If not present, request from server. DO NOT generate locally.
+        ChunkData cData = getWorldData().getChunks().get(key);
         if (cData == null) {
-            // Request from server and return null or wait until the chunk arrives
-            // This might mean you need asynchronous handling or a placeholder.
-            multiplayerClient.requestChunk(chunkX, chunkY);
-            return null; // Until the server responds
+            if (isMultiplayerMode) {
+                // In multiplayer mode, do NOT generate locally. Just request and return null for now.
+                multiplayerClient.requestChunk(chunkX, chunkY);
+                return null;
+            } else {
+                // Singleplayer mode: generate or load chunk locally as before
+                loadOrGenerateChunk(chunkX, chunkY);
+                cData = getWorldData().getChunks().get(key);
+            }
         }
-        return cData.getTiles();
+        return cData != null ? cData.getTiles() : null;
     }
 
     @Override
@@ -307,35 +315,37 @@ public class ClientWorldServiceImpl extends BaseWorldServiceImpl implements Worl
         return visibleChunks;
     }
 
-
     private void loadOrGenerateChunk(int chunkX, int chunkY) {
-        String key = chunkX + "," + chunkY;
-        ChunkData.ChunkKey cKey = new ChunkData.ChunkKey(chunkX, chunkY);
-        Optional<ChunkData> opt = chunkRepository.findById(new ChunkData.ChunkKey(chunkX, chunkY));
-        if (opt.isPresent()) {
-            ChunkData cData = opt.get();
-
-            if (cData.getObjects() != null) {
-                cData.setObjects(new ArrayList<>(cData.getObjects()));
-            }
-
-            worldObjectManager.loadObjectsForChunk(chunkX, chunkY, cData.getObjects());
-            worldData.getChunks().put(key, cData);
+        if (isMultiplayerMode) {
+            // Do nothing in multiplayer mode. We rely solely on server data.
             return;
         }
 
+        // Original singleplayer logic here:
+        String key = chunkX + "," + chunkY;
+        Optional<ChunkData> opt = chunkRepository.findById(new ChunkData.ChunkKey(chunkX, chunkY));
+        if (opt.isPresent()) {
+            ChunkData cData = opt.get();
+            if (cData.getObjects() != null) {
+                cData.setObjects(new ArrayList<>(cData.getObjects()));
+            }
+            worldObjectManager.loadObjectsForChunk(chunkX, chunkY, cData.getObjects());
+            getWorldData().getChunks().put(key, cData);
+            return;
+        }
 
         int[][] tiles = worldGenerator.generateChunk(chunkX, chunkY);
         ChunkData cData = new ChunkData();
-        cData.setKey(cKey);
+        cData.setKey(new ChunkData.ChunkKey(chunkX, chunkY));
         cData.setTiles(tiles);
         Biome biome = worldGenerator.getBiomeForChunk(chunkX, chunkY);
-        List<WorldObject> objs = worldObjectManager.generateObjectsForChunk(chunkX, chunkY, tiles, biome, worldData.getSeed());
+        List<WorldObject> objs = worldObjectManager.generateObjectsForChunk(chunkX, chunkY, tiles, biome, getWorldData().getSeed());
         cData.setObjects(objs);
 
-        worldData.getChunks().put(key, cData);
+        getWorldData().getChunks().put(key, cData);
         chunkRepository.save(cData);
     }
+
 
 
     @Override
