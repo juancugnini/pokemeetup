@@ -9,6 +9,7 @@ import io.github.pokemeetup.multiplayer.service.MultiplayerClient;
 import io.github.pokemeetup.player.service.PlayerService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -21,7 +22,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 @Slf4j
 public class ChatServiceImpl implements ChatService {
 
-    private final List<ChatListener> listeners = new CopyOnWriteArrayList<>();
     private final PlayerService playerService;
     private final MultiplayerClient multiplayerClient;
     private final CommandService commandService;
@@ -30,6 +30,9 @@ public class ChatServiceImpl implements ChatService {
     private boolean isActive;
     private int messageHistoryIndex = -1;
     private String currentInputBeforeHistory = "";
+
+    private final List<ChatListener> listeners = new CopyOnWriteArrayList<>();
+
     @Autowired
     public ChatServiceImpl(PlayerService playerService, MultiplayerClient multiplayerClient, CommandService commandService) {
         this.playerService = playerService;
@@ -37,12 +40,10 @@ public class ChatServiceImpl implements ChatService {
         this.commandService = commandService;
     }
 
-    public void addListener(ChatListener listener) {
-        listeners.add(listener);
-    }
-
-    public void removeListener(ChatListener listener) {
-        listeners.remove(listener);
+    @EventListener 
+    public void onChatMessageReceived(ChatMessageReceivedEvent event) {
+        ChatMessage chatMessage = event.getChatMessage();
+        handleIncomingMessage(chatMessage);
     }
 
     @Override
@@ -55,15 +56,9 @@ public class ChatServiceImpl implements ChatService {
         return newMessages;
     }
 
-    public void onChatMessageReceived(ChatMessageReceivedEvent event) {
-        ChatMessage chatMessage = event.getChatMessage();
-        handleIncomingMessage(chatMessage);
-    }
-
     @Override
     public void sendMessage(String content) {
         if (content.isEmpty()) return;
-
 
         if (messageHistory.isEmpty() || !content.equals(messageHistory.get(messageHistory.size() - 1))) {
             messageHistory.add(content);
@@ -105,6 +100,7 @@ public class ChatServiceImpl implements ChatService {
     public void handleIncomingMessage(ChatMessage message) {
         messages.add(message);
         log.info("Received chat message from: {} content: {}", message.getSender(), message.getContent());
+
         for (ChatListener listener : listeners) {
             listener.onNewMessage(message);
         }
@@ -120,7 +116,6 @@ public class ChatServiceImpl implements ChatService {
     @Override
     public void deactivateChat() {
         isActive = false;
-
         messageHistoryIndex = messageHistory.size();
         currentInputBeforeHistory = "";
     }
@@ -137,8 +132,6 @@ public class ChatServiceImpl implements ChatService {
 
     @Override
     public String getPreviousHistoryMessage(String currentText) {
-
-
         if (messageHistoryIndex == messageHistory.size()) {
             currentInputBeforeHistory = currentText;
         }
@@ -147,12 +140,10 @@ public class ChatServiceImpl implements ChatService {
             return currentText;
         }
 
-
         if (messageHistoryIndex > 0) {
             messageHistoryIndex--;
             return messageHistory.get(messageHistoryIndex);
         } else {
-
             return messageHistory.get(0);
         }
     }
@@ -163,16 +154,22 @@ public class ChatServiceImpl implements ChatService {
             return "";
         }
 
-
         if (messageHistoryIndex < messageHistory.size()) {
             messageHistoryIndex++;
         }
-
 
         if (messageHistoryIndex == messageHistory.size()) {
             return currentInputBeforeHistory;
         } else {
             return messageHistory.get(messageHistoryIndex);
         }
+    }
+    public void addListener(ChatListener listener) {
+        listeners.add(listener);
+    }
+
+
+    public void removeListener(ChatListener listener) {
+        listeners.remove(listener);
     }
 }

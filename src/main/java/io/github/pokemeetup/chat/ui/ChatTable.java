@@ -25,6 +25,8 @@ public class ChatTable extends Table implements ChatListener {
         this.skin = skin;
         this.chatService = chatService;
 
+        this.chatService.addListener(this);
+
         setFillParent(false);
         pad(10);
 
@@ -38,7 +40,6 @@ public class ChatTable extends Table implements ChatListener {
         inputField = new TextField("", textFieldStyle);
         inputField.setMessageText("Press T to chat...");
         inputField.setFocusTraversal(false);
-
 
         inputField.addListener(new InputListener() {
             @Override
@@ -56,13 +57,11 @@ public class ChatTable extends Table implements ChatListener {
                     deactivate();
                     return true;
                 } else if (keycode == Input.Keys.UP) {
-
                     String previousMessage = chatService.getPreviousHistoryMessage(inputField.getText());
                     inputField.setText(previousMessage);
                     inputField.setCursorPosition(previousMessage.length());
                     return true;
                 } else if (keycode == Input.Keys.DOWN) {
-
                     String nextMessage = chatService.getNextHistoryMessage();
                     inputField.setText(nextMessage);
                     inputField.setCursorPosition(nextMessage.length());
@@ -77,6 +76,8 @@ public class ChatTable extends Table implements ChatListener {
 
         add(inputField).expandX().fillX().height(30);
 
+        // Initial call to ensure existing messages are displayed
+        updateMessages();
     }
 
     @Override
@@ -85,10 +86,6 @@ public class ChatTable extends Table implements ChatListener {
     }
 
     private void addMessage(ChatMessage msg) {
-        int MAX_MESSAGES = 100;
-        if (messageTable.getChildren().size > MAX_MESSAGES) {
-            messageTable.getChildren().removeIndex(0);
-        }
         Label nameLabel = new Label(msg.getSender() + ": ", skin);
         Label contentLabel = new Label(msg.getContent(), skin);
         contentLabel.setWrap(true);
@@ -100,6 +97,7 @@ public class ChatTable extends Table implements ChatListener {
 
         messageTable.add(msgTable).expandX().fillX().padBottom(2).row();
 
+        // Scroll to the bottom after adding a new message
         messageScroll.layout();
         messageScroll.scrollTo(0, messageTable.getHeight(), 0, 0);
     }
@@ -127,5 +125,6 @@ public class ChatTable extends Table implements ChatListener {
         }
     }
 
-
+    public void updateMessages() {
+    }
 }
