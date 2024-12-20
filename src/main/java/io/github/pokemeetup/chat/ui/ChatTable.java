@@ -4,11 +4,12 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.scenes.scene2d.*;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
+import io.github.pokemeetup.chat.event.ChatListener;
 import io.github.pokemeetup.chat.model.ChatMessage;
 import io.github.pokemeetup.chat.service.ChatService;
 import lombok.Getter;
 
-public class ChatTable extends Table {
+public class ChatTable extends Table implements ChatListener {
 
     private final ChatService chatService;
     private final Skin skin;
@@ -76,7 +77,31 @@ public class ChatTable extends Table {
 
         add(inputField).expandX().fillX().height(30);
 
-        updateMessages();
+    }
+
+    @Override
+    public void onNewMessage(ChatMessage msg) {
+        Gdx.app.postRunnable(() -> addMessage(msg));
+    }
+
+    private void addMessage(ChatMessage msg) {
+        int MAX_MESSAGES = 100;
+        if (messageTable.getChildren().size > MAX_MESSAGES) {
+            messageTable.getChildren().removeIndex(0);
+        }
+        Label nameLabel = new Label(msg.getSender() + ": ", skin);
+        Label contentLabel = new Label(msg.getContent(), skin);
+        contentLabel.setWrap(true);
+
+        Table msgTable = new Table(skin);
+        msgTable.left().top();
+        msgTable.add(nameLabel).padRight(5);
+        msgTable.add(contentLabel).expandX().fillX();
+
+        messageTable.add(msgTable).expandX().fillX().padBottom(2).row();
+
+        messageScroll.layout();
+        messageScroll.scrollTo(0, messageTable.getHeight(), 0, 0);
     }
 
     public void activate() {
@@ -102,22 +127,5 @@ public class ChatTable extends Table {
         }
     }
 
-    public void updateMessages() {
-        messageTable.clear();
-        for (ChatMessage msg : chatService.getMessages()) {
-            Label nameLabel = new Label(msg.getSender()+": ", skin);
-            Label contentLabel = new Label(msg.getContent(), skin);
-            contentLabel.setWrap(true);
 
-            Table msgTable = new Table(skin);
-            msgTable.left().top();
-            msgTable.add(nameLabel).padRight(5);
-            msgTable.add(contentLabel).expandX().fillX();
-
-            messageTable.add(msgTable).expandX().fillX().padBottom(2).row();
-        }
-
-        messageScroll.layout();
-        messageScroll.scrollTo(0,0,0,0);
-    }
 }

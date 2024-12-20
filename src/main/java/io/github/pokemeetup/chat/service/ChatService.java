@@ -2,6 +2,7 @@ package io.github.pokemeetup.chat.service;
 
 import io.github.pokemeetup.chat.model.ChatMessage;
 
+import java.util.List;
 import java.util.Queue;
 
 public interface ChatService {
@@ -11,7 +12,7 @@ public interface ChatService {
     void activateChat();
     void deactivateChat();
     boolean isActive();
-
+    List<ChatMessage> pollMessages();
     Queue<ChatMessage> getMessages();
 
     

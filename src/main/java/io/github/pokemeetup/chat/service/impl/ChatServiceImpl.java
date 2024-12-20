@@ -1,5 +1,6 @@
 package io.github.pokemeetup.chat.service.impl;
 
+import io.github.pokemeetup.chat.event.ChatListener;
 import io.github.pokemeetup.chat.event.ChatMessageReceivedEvent;
 import io.github.pokemeetup.chat.model.ChatMessage;
 import io.github.pokemeetup.chat.service.ChatService;
@@ -11,26 +12,24 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 @Service
 @Slf4j
 public class ChatServiceImpl implements ChatService {
 
+    private final List<ChatListener> listeners = new CopyOnWriteArrayList<>();
     private final PlayerService playerService;
     private final MultiplayerClient multiplayerClient;
     private final CommandService commandService;
-
-    private boolean isActive;
-    private final Queue<ChatMessage> messages = new LinkedList<>();
+    private final ConcurrentLinkedQueue<ChatMessage> messages = new ConcurrentLinkedQueue<>();
     private final List<String> messageHistory = new ArrayList<>();
+    private boolean isActive;
     private int messageHistoryIndex = -1;
-
-
     private String currentInputBeforeHistory = "";
-
     @Autowired
     public ChatServiceImpl(PlayerService playerService, MultiplayerClient multiplayerClient, CommandService commandService) {
         this.playerService = playerService;
@@ -38,16 +37,35 @@ public class ChatServiceImpl implements ChatService {
         this.commandService = commandService;
     }
 
+    public void addListener(ChatListener listener) {
+        listeners.add(listener);
+    }
+
+    public void removeListener(ChatListener listener) {
+        listeners.remove(listener);
+    }
+
+    @Override
+    public List<ChatMessage> pollMessages() {
+        List<ChatMessage> newMessages = new ArrayList<>();
+        ChatMessage msg;
+        while ((msg = messages.poll()) != null) {
+            newMessages.add(msg);
+        }
+        return newMessages;
+    }
+
     public void onChatMessageReceived(ChatMessageReceivedEvent event) {
         ChatMessage chatMessage = event.getChatMessage();
         handleIncomingMessage(chatMessage);
     }
+
     @Override
     public void sendMessage(String content) {
         if (content.isEmpty()) return;
 
 
-        if (messageHistory.isEmpty() || !content.equals(messageHistory.get(messageHistory.size()-1))) {
+        if (messageHistory.isEmpty() || !content.equals(messageHistory.get(messageHistory.size() - 1))) {
             messageHistory.add(content);
             messageHistoryIndex = messageHistory.size();
         }
@@ -87,6 +105,9 @@ public class ChatServiceImpl implements ChatService {
     public void handleIncomingMessage(ChatMessage message) {
         messages.add(message);
         log.info("Received chat message from: {} content: {}", message.getSender(), message.getContent());
+        for (ChatListener listener : listeners) {
+            listener.onNewMessage(message);
+        }
     }
 
     @Override

@@ -289,10 +289,9 @@ public class GameScreen implements Screen {
 
         for (Map.Entry<String, PlayerSyncData> entry : states.entrySet()) {
             String otherUsername = entry.getKey();
-            if (otherUsername.equals(localUsername)) continue; // skip the local player
-
+            if (otherUsername.equals(localUsername)) continue;
             PlayerSyncData psd = entry.getValue();
-            float px = psd.getX() * 32; // assuming TILE_SIZE = 32
+            float px = psd.getX() * 32;
             float py = psd.getY() * 32;
 
             PlayerDirection dir = PlayerDirection.valueOf(psd.getDirection());
@@ -310,7 +309,6 @@ public class GameScreen implements Screen {
 
         hudStage.act(delta);
 
-        chatTable.updateMessages();
 
         hudStage.draw();
 
