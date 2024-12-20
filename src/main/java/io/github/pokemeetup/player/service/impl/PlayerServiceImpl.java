@@ -4,14 +4,15 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Rectangle;
 import io.github.pokemeetup.event.EventBus;
+import io.github.pokemeetup.input.InputService;
+import io.github.pokemeetup.multiplayer.service.MultiplayerClient;
+import io.github.pokemeetup.player.config.PlayerProperties;
 import io.github.pokemeetup.player.event.PlayerMoveEvent;
 import io.github.pokemeetup.player.model.PlayerData;
 import io.github.pokemeetup.player.model.PlayerDirection;
 import io.github.pokemeetup.player.model.PlayerModel;
 import io.github.pokemeetup.player.service.PlayerAnimationService;
 import io.github.pokemeetup.player.service.PlayerService;
-import io.github.pokemeetup.input.InputService;
-import io.github.pokemeetup.player.config.PlayerProperties;
 import io.github.pokemeetup.world.model.ChunkData;
 import io.github.pokemeetup.world.model.WorldObject;
 import io.github.pokemeetup.world.service.WorldService;
@@ -31,12 +32,14 @@ public class PlayerServiceImpl implements PlayerService {
     private String username;
     private final float walkStepDuration;
     private final float runStepDuration;
-
     private final InputService inputService;
     private PlayerDirection bufferedDirection = null;
 
     @Autowired
     private EventBus eventBus;
+
+    @Autowired
+    private MultiplayerClient multiplayerClient;
 
     public PlayerServiceImpl(
             PlayerAnimationService animationService,
@@ -79,16 +82,12 @@ public class PlayerServiceImpl implements PlayerService {
             case RIGHT -> targetTileX += 1;
         }
 
-
         playerModel.setDirection(direction);
-        logger.debug("Player facing direction: {}", direction);
 
         if (isColliding(targetTileX, targetTileY)) {
             logger.debug("Collision detected at tile ({}, {}), movement blocked.", targetTileX, targetTileY);
-
             return;
         }
-
 
         playerModel.setRunning(inputService.isRunning());
 
@@ -108,9 +107,7 @@ public class PlayerServiceImpl implements PlayerService {
         logger.debug("Initiated movement: {}, Target=({}, {}), Duration={}", direction, targetX, targetY, duration);
     }
 
-    
     private boolean isColliding(int tileX, int tileY) {
-
         int chunkX = tileX / 16;
         int chunkY = tileY / 16;
         int[][] chunkTiles = worldService.getChunkTiles(chunkX, chunkY);
@@ -125,13 +122,10 @@ public class PlayerServiceImpl implements PlayerService {
             return true;
         }
 
-
         float tileSize = PlayerModel.TILE_SIZE;
         Rectangle targetTileRect = new Rectangle(tileX * tileSize, tileY * tileSize, tileSize, tileSize);
 
-
         List<WorldObject> nearbyObjects = new ArrayList<>();
-
 
         for (int dx = -1; dx <= 1; dx++) {
             for (int dy = -1; dy <= 1; dy++) {
@@ -178,7 +172,16 @@ public class PlayerServiceImpl implements PlayerService {
                 playerModel.setMoving(false);
                 playerModel.setPosition(playerModel.getTargetPosition().x, playerModel.getTargetPosition().y);
 
-                worldService.setPlayerData(getPlayerData());
+                // Movement completed, send updated position to the server
+                PlayerData pd = getPlayerData();
+                worldService.setPlayerData(pd);
+                multiplayerClient.sendPlayerMove(
+                        pd.getX(),
+                        pd.getY(),
+                        pd.isWantsToRun(),
+                        pd.isMoving(),
+                        pd.getDirection().name().toLowerCase()
+                );
 
                 if (bufferedDirection != null) {
                     PlayerDirection nextDir = bufferedDirection;

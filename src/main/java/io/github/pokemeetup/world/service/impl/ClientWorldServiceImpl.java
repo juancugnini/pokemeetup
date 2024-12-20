@@ -12,6 +12,7 @@ import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import io.github.pokemeetup.multiplayer.model.WorldObjectUpdate;
+import io.github.pokemeetup.multiplayer.service.MultiplayerClient;
 import io.github.pokemeetup.player.model.PlayerData;
 import io.github.pokemeetup.player.repository.PlayerDataRepository;
 import io.github.pokemeetup.world.biome.config.BiomeConfigurationLoader;
@@ -29,6 +30,7 @@ import io.github.pokemeetup.world.service.WorldService;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -57,6 +59,8 @@ public class ClientWorldServiceImpl extends BaseWorldServiceImpl implements Worl
     @Value("${world.saveDir:assets/save/worlds/}")
     private String saveDir;
     private boolean initialized = false;
+    @Autowired
+    private MultiplayerClient multiplayerClient;
 
     public ClientWorldServiceImpl(WorldConfig worldConfig,
                                   WorldGenerator worldGenerator,
@@ -265,12 +269,41 @@ public class ClientWorldServiceImpl extends BaseWorldServiceImpl implements Worl
     @Override
     public int[][] getChunkTiles(int chunkX, int chunkY) {
         String key = chunkX + "," + chunkY;
-        if (!worldData.getChunks().containsKey(key)) {
-            loadOrGenerateChunk(chunkX, chunkY);
-        }
         ChunkData cData = worldData.getChunks().get(key);
-        return cData != null ? cData.getTiles() : null;
+        // If not present, request from server. DO NOT generate locally.
+        if (cData == null) {
+            // Request from server and return null or wait until the chunk arrives
+            // This might mean you need asynchronous handling or a placeholder.
+            multiplayerClient.requestChunk(chunkX, chunkY);
+            return null; // Until the server responds
+        }
+        return cData.getTiles();
     }
+
+    @Override
+    public Map<String, ChunkData> getVisibleChunks(Rectangle viewBounds) {
+        Map<String, ChunkData> visibleChunks = new HashMap<>();
+        int startChunkX = (int) Math.floor(viewBounds.x / (CHUNK_SIZE * TILE_SIZE));
+        int startChunkY = (int) Math.floor(viewBounds.y / (CHUNK_SIZE * TILE_SIZE));
+        int endChunkX = (int) Math.ceil((viewBounds.x + viewBounds.width) / (CHUNK_SIZE * TILE_SIZE));
+        int endChunkY = (int) Math.ceil((viewBounds.y + viewBounds.height) / (CHUNK_SIZE * TILE_SIZE));
+
+        for (int x = startChunkX; x <= endChunkX; x++) {
+            for (int y = startChunkY; y <= endChunkY; y++) {
+                String key = x + "," + y;
+                ChunkData chunk = worldData.getChunks().get(key);
+                if (chunk == null) {
+                    // Request it from server if not already requested
+                    multiplayerClient.requestChunk(x, y);
+                    continue; // It's not ready yet
+                }
+                visibleChunks.put(key, chunk);
+            }
+        }
+
+        return visibleChunks;
+    }
+
 
     private void loadOrGenerateChunk(int chunkX, int chunkY) {
         String key = chunkX + "," + chunkY;
@@ -331,30 +364,6 @@ public class ClientWorldServiceImpl extends BaseWorldServiceImpl implements Worl
         return visibleObjects;
     }
 
-    @Override
-    public Map<String, ChunkData> getVisibleChunks(Rectangle viewBounds) {
-        Map<String, ChunkData> visibleChunks = new HashMap<>();
-
-        int startChunkX = (int) Math.floor(viewBounds.x / (CHUNK_SIZE * TILE_SIZE));
-        int startChunkY = (int) Math.floor(viewBounds.y / (CHUNK_SIZE * TILE_SIZE));
-        int endChunkX = (int) Math.ceil((viewBounds.x + viewBounds.width) / (CHUNK_SIZE * TILE_SIZE));
-        int endChunkY = (int) Math.ceil((viewBounds.y + viewBounds.height) / (CHUNK_SIZE * TILE_SIZE));
-
-        for (int x = startChunkX; x <= endChunkX; x++) {
-            for (int y = startChunkY; y <= endChunkY; y++) {
-                String key = x + "," + y;
-                if (!worldData.getChunks().containsKey(key)) {
-                    loadOrGenerateChunk(x, y);
-                }
-                ChunkData chunk = worldData.getChunks().get(key);
-                if (chunk != null) {
-                    visibleChunks.put(key, chunk);
-                }
-            }
-        }
-
-        return visibleChunks;
-    }
 
     @Override
     public void setPlayerData(PlayerData playerData) {
