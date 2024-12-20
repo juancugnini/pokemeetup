@@ -275,14 +275,19 @@ public class ClientWorldServiceImpl extends BaseWorldServiceImpl implements Worl
     private void loadOrGenerateChunk(int chunkX, int chunkY) {
         String key = chunkX + "," + chunkY;
         ChunkData.ChunkKey cKey = new ChunkData.ChunkKey(chunkX, chunkY);
-        Optional<ChunkData> opt = chunkRepository.findById(cKey);
-
+        Optional<ChunkData> opt = chunkRepository.findById(new ChunkData.ChunkKey(chunkX, chunkY));
         if (opt.isPresent()) {
             ChunkData cData = opt.get();
+
+            if (cData.getObjects() != null) {
+                cData.setObjects(new ArrayList<>(cData.getObjects()));
+            }
+
             worldObjectManager.loadObjectsForChunk(chunkX, chunkY, cData.getObjects());
             worldData.getChunks().put(key, cData);
             return;
         }
+
 
         int[][] tiles = worldGenerator.generateChunk(chunkX, chunkY);
         ChunkData cData = new ChunkData();

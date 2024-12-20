@@ -212,10 +212,16 @@ public class ServerWorldServiceImpl extends BaseWorldServiceImpl implements Worl
         Optional<ChunkData> opt = chunkRepository.findById(new ChunkData.ChunkKey(chunkX, chunkY));
         if (opt.isPresent()) {
             ChunkData cData = opt.get();
+
+            if (cData.getObjects() != null) {
+                cData.setObjects(new ArrayList<>(cData.getObjects()));
+            }
+
             worldObjectManager.loadObjectsForChunk(chunkX, chunkY, cData.getObjects());
             worldData.getChunks().put(key, cData);
             return;
         }
+
 
         int[][] tiles = worldGenerator.generateChunk(chunkX, chunkY);
         ChunkData cData = new ChunkData();
