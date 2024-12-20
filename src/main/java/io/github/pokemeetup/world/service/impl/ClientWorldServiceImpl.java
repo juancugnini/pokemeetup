@@ -11,6 +11,7 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
+import io.github.pokemeetup.multiplayer.model.WorldObjectUpdate;
 import io.github.pokemeetup.player.model.PlayerData;
 import io.github.pokemeetup.player.repository.PlayerDataRepository;
 import io.github.pokemeetup.world.biome.config.BiomeConfigurationLoader;
@@ -76,6 +77,49 @@ public class ClientWorldServiceImpl extends BaseWorldServiceImpl implements Worl
         this.worldMetadataRepo = worldMetadataRepo;
         this.chunkRepository = chunkRepository;
         this.playerDataRepository = playerDataRepository;
+    }
+
+    @Override
+    public void loadOrReplaceChunkData(int chunkX, int chunkY, int[][] tiles, List<WorldObject> objects) {
+        String key = chunkX + "," + chunkY;
+        ChunkData cData = new ChunkData();
+        cData.setKey(new ChunkData.ChunkKey(chunkX, chunkY));
+        cData.setTiles(tiles);
+        cData.setObjects(objects);
+        getWorldData().getChunks().put(key, cData);
+    }
+
+    @Override
+
+    public void updateWorldObjectState(WorldObjectUpdate update) {
+        String key = (update.getTileX() / 16) + "," + (update.getTileY() / 16);
+        ChunkData chunk = getWorldData().getChunks().get(key);
+        if (chunk == null) return; // Chunk not loaded yet?
+
+        List<WorldObject> objs = chunk.getObjects();
+        if (update.isRemoved()) {
+            objs.removeIf(o -> o.getId().equals(update.getObjectId()));
+        } else {
+            boolean found = false;
+            for (WorldObject wo : objs) {
+                if (wo.getId().equals(update.getObjectId())) {
+                    wo.setTileX(update.getTileX());
+                    wo.setTileY(update.getTileY());
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                ObjectType objType = ObjectType.valueOf(update.getType());
+                WorldObject newObj = new WorldObject(
+                        update.getTileX(),
+                        update.getTileY(),
+                        objType,
+                        objType.isCollidable()
+                );
+                objs.add(newObj);
+            }
+        }
     }
 
     @Override

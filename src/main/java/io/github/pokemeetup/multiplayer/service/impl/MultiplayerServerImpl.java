@@ -13,7 +13,9 @@ import io.github.pokemeetup.player.event.PlayerLeaveEvent;
 import io.github.pokemeetup.player.model.PlayerData;
 import io.github.pokemeetup.multiplayer.model.ChunkUpdate;
 import io.github.pokemeetup.multiplayer.model.PlayerSyncData;
+import io.github.pokemeetup.world.service.WorldService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
@@ -33,6 +35,8 @@ public class MultiplayerServerImpl implements MultiplayerServer {
 
     private Server server;
     private volatile boolean running = false;
+    @Autowired
+    private WorldService worldService;
 
     public MultiplayerServerImpl(MultiplayerService multiplayerService,
                                  EventBus eventBus,
@@ -123,7 +127,6 @@ public class MultiplayerServerImpl implements MultiplayerServer {
 
     }
 
-
     private void handleLogin(Connection connection, NetworkProtocol.LoginRequest req) {
         boolean authSuccess = authService.authenticate(req.getUsername(), req.getPassword());
         NetworkProtocol.LoginResponse resp = new NetworkProtocol.LoginResponse();
@@ -175,12 +178,14 @@ public class MultiplayerServerImpl implements MultiplayerServer {
             return;
         }
 
-        PlayerData pd = multiplayerService.getPlayerData(username);
+        // Directly use the worldService to get and update player data
+        PlayerData pd = worldService.getPlayerData(username);
         if (pd == null) {
             log.warn("PlayerData not found for username: {}", username);
             return;
         }
 
+        // Update player position and state
         pd.setX(moveReq.getX());
         pd.setY(moveReq.getY());
         pd.setWantsToRun(moveReq.isRunning());
@@ -192,8 +197,18 @@ public class MultiplayerServerImpl implements MultiplayerServer {
             log.error("Invalid direction '{}' for player '{}'", moveReq.getDirection(), username, e);
         }
 
-        multiplayerService.updatePlayerData(pd);
+        // Use the worldService directly to persist the updated player data
+        worldService.setPlayerData(pd);
+
+        // Broadcast updated player states to all clients
         broadcastPlayerStates();
+    }
+
+    private void broadcastPlayerStates() {
+        Map<String, PlayerSyncData> states = multiplayerService.getAllPlayerStates();
+        NetworkProtocol.PlayerStatesUpdate update = new NetworkProtocol.PlayerStatesUpdate();
+        update.setPlayers(states);
+        broadcast(update);
     }
 
     private void handleChunkRequest(Connection connection, NetworkProtocol.ChunkRequest req) {
@@ -235,12 +250,6 @@ public class MultiplayerServerImpl implements MultiplayerServer {
         }
     }
 
-    private void broadcastPlayerStates() {
-        Map<String, PlayerSyncData> states = multiplayerService.getAllPlayerStates();
-        NetworkProtocol.PlayerStatesUpdate update = new NetworkProtocol.PlayerStatesUpdate();
-        update.setPlayers(states);
-        broadcast(update);
-    }
 
     @Override
     public void broadcast(Object message) {

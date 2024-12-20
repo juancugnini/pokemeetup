@@ -1,7 +1,9 @@
 package io.github.pokemeetup.world.service.impl;
 
+import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
+import io.github.pokemeetup.multiplayer.model.WorldObjectUpdate;
 import io.github.pokemeetup.player.model.PlayerData;
 import io.github.pokemeetup.player.repository.PlayerDataRepository;
 import io.github.pokemeetup.world.biome.config.BiomeConfigurationLoader;
@@ -45,6 +47,9 @@ public class ServerWorldServiceImpl extends BaseWorldServiceImpl implements Worl
 
     @Value("${world.defaultName:defaultWorld}")
     private String defaultWorldName;
+
+    // Since server typically doesn't render, we can store a dummy camera if needed:
+    private OrthographicCamera camera = null;
 
     public ServerWorldServiceImpl(WorldGenerator worldGenerator,
                                   WorldObjectManager worldObjectManager,
@@ -155,7 +160,6 @@ public class ServerWorldServiceImpl extends BaseWorldServiceImpl implements Worl
         for (PlayerData pd : worldData.getPlayers().values()) {
             playerDataRepository.save(pd);
         }
-
 
         for (Map.Entry<String, ChunkData> entry : worldData.getChunks().entrySet()) {
             String[] parts = entry.getKey().split(",");
@@ -333,5 +337,80 @@ public class ServerWorldServiceImpl extends BaseWorldServiceImpl implements Worl
     @Override
     public void generateWorldThumbnail(String worldName) {
         logger.info("Skipping world thumbnail generation on server.");
+    }
+
+    // Implementations of the missing methods
+
+    @Override
+    public void loadOrReplaceChunkData(int chunkX, int chunkY, int[][] tiles, List<WorldObject> objects) {
+        String key = chunkX + "," + chunkY;
+        ChunkData cData = new ChunkData();
+        cData.setKey(new ChunkData.ChunkKey(chunkX, chunkY));
+        cData.setTiles(tiles);
+        cData.setObjects(objects);
+        worldData.getChunks().put(key, cData);
+        logger.info("Replaced/Loaded chunk ({}, {}) with {} objects.", chunkX, chunkY, objects != null ? objects.size() : 0);
+    }
+
+    @Override
+    public void updateWorldObjectState(WorldObjectUpdate update) {
+        String key = (update.getTileX() / 16) + "," + (update.getTileY() / 16);
+        ChunkData chunk = worldData.getChunks().get(key);
+        if (chunk == null) {
+            logger.warn("No chunk found for ({}, {}) to update object {}.", update.getTileX()/16, update.getTileY()/16, update.getObjectId());
+            return;
+        }
+
+        List<WorldObject> objs = chunk.getObjects();
+        if (objs == null) {
+            objs = new ArrayList<>();
+            chunk.setObjects(objs);
+        }
+
+        if (update.isRemoved()) {
+            boolean removed = objs.removeIf(o -> o.getId().equals(update.getObjectId()));
+            if (removed) {
+                logger.info("Removed object {} from chunk {}", update.getObjectId(), key);
+            }
+        } else {
+            // Check if object already exists
+            boolean found = false;
+            for (WorldObject wo : objs) {
+                if (wo.getId().equals(update.getObjectId())) {
+                    wo.setTileX(update.getTileX());
+                    wo.setTileY(update.getTileY());
+                    found = true;
+                    logger.info("Updated object {} position in chunk {}", update.getObjectId(), key);
+                    break;
+                }
+            }
+            if (!found) {
+                try {
+                    ObjectType objType = ObjectType.valueOf(update.getType());
+                    WorldObject newObj = new WorldObject(
+                            update.getTileX(),
+                            update.getTileY(),
+                            objType,
+                            objType.isCollidable()
+                    );
+                    objs.add(newObj);
+                    logger.info("Added new object {} of type {} in chunk {}", update.getObjectId(), update.getType(), key);
+                } catch (IllegalArgumentException e) {
+                    logger.error("Invalid object type '{}' for new object '{}'", update.getType(), update.getObjectId());
+                }
+            }
+        }
+    }
+
+    @Override
+    public OrthographicCamera getCamera() {
+        // Server typically does not have a camera.
+        return camera;
+    }
+
+    @Override
+    public void setCamera(OrthographicCamera camera) {
+        // No-op for server, we can store it but it has no real use here.
+        this.camera = camera;
     }
 }

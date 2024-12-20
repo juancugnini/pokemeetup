@@ -10,8 +10,10 @@ import io.github.pokemeetup.chat.service.ChatService;
 import io.github.pokemeetup.multiplayer.model.ChunkUpdate;
 import io.github.pokemeetup.multiplayer.model.PlayerSyncData;
 import io.github.pokemeetup.multiplayer.service.MultiplayerClient;
+import io.github.pokemeetup.player.model.PlayerData;
 import io.github.pokemeetup.world.model.ObjectType;
 import io.github.pokemeetup.world.model.WorldObject;
+import io.github.pokemeetup.world.service.WorldService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -33,6 +35,8 @@ public class MultiplayerClientImpl implements MultiplayerClient {
     private CreateUserResponseListener createUserResponseListener;
     private Runnable pendingCreateUserRequest = null;
     private Runnable pendingLoginRequest = null;
+    @Autowired
+    private WorldService worldService;
 
     @Autowired
     public MultiplayerClientImpl(ApplicationEventPublisher eventPublisher) { // Modify constructor
@@ -181,15 +185,25 @@ public class MultiplayerClientImpl implements MultiplayerClient {
                 );
             }
         } else if (object instanceof NetworkProtocol.PlayerStatesUpdate pUpdate) {
+            // Clear and update player states
             playerStates.clear();
             playerStates.putAll(pUpdate.getPlayers());
+
+            // **New Step:** Update local player animations and camera based on new states
+            Gdx.app.postRunnable(this::updateLocalPlayersFromServerStates);
         } else if (object instanceof NetworkProtocol.ChunkData chunkData) {
+            // Update local world chunk data
             ChunkUpdate cUp = new ChunkUpdate();
             cUp.setChunkX(chunkData.getChunkX());
             cUp.setChunkY(chunkData.getChunkY());
             cUp.setTiles(chunkData.getTiles());
             cUp.setObjects(chunkData.getObjects());
             loadedChunks.put(chunkData.getChunkX() + "," + chunkData.getChunkY(), cUp);
+
+            // The local world should now render these updates.
+            Gdx.app.postRunnable(() -> {
+                worldService.loadOrReplaceChunkData(chunkData.getChunkX(), chunkData.getChunkY(), chunkData.getTiles(), chunkData.getObjects());
+            });
         } else if (object instanceof NetworkProtocol.WorldObjectsUpdate wObjects) {
             wObjects.getObjects().forEach(update -> {
                 String key = (update.getTileX() / 16) + "," + (update.getTileY() / 16);
@@ -219,6 +233,10 @@ public class MultiplayerClientImpl implements MultiplayerClient {
                         }
                     }
                 }
+                // Update the local world service with the object changes
+                Gdx.app.postRunnable(() -> {
+                    worldService.updateWorldObjectState(update);
+                });
             });
         } else if (object instanceof io.github.pokemeetup.chat.model.ChatMessage chatMsg) {
             log.info("Received ChatMessage from {}: {}", chatMsg.getSender(), chatMsg.getContent());
@@ -227,6 +245,36 @@ public class MultiplayerClientImpl implements MultiplayerClient {
             log.warn("Unknown message type received: {}", object.getClass().getName());
         }
     }
+
+    private void updateLocalPlayersFromServerStates() {
+
+        for (Map.Entry<String, PlayerSyncData> entry : playerStates.entrySet()) {
+            String username = entry.getKey();
+            PlayerSyncData syncData = entry.getValue();
+
+            // Retrieve or create PlayerData for this player
+            PlayerData localPD = worldService.getPlayerData(username);
+            if (localPD == null) {
+                localPD = new PlayerData(username, syncData.getX(), syncData.getY());
+                worldService.setPlayerData(localPD);
+            }
+
+            // Update the local player data with server state
+            localPD.setX(syncData.getX());
+            localPD.setY(syncData.getY());
+            localPD.setWantsToRun(syncData.isRunning());
+            localPD.setMoving(syncData.isMoving());
+
+            try {
+                localPD.setDirection(io.github.pokemeetup.player.model.PlayerDirection.valueOf(syncData.getDirection().toUpperCase()));
+            } catch (IllegalArgumentException e) {
+                log.error("Invalid direction '{}' for player '{}'", syncData.getDirection(), username, e);
+            }
+
+        }
+    }
+
+
 
     @Override
     public void disconnect() {

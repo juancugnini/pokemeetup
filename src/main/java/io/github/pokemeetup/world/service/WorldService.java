@@ -3,6 +3,7 @@ package io.github.pokemeetup.world.service;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
+import io.github.pokemeetup.multiplayer.model.WorldObjectUpdate;
 import io.github.pokemeetup.player.model.PlayerData;
 import io.github.pokemeetup.world.model.ChunkData;
 import io.github.pokemeetup.world.model.WorldData;
@@ -15,6 +16,8 @@ public interface WorldService {
     void initIfNeeded();
     WorldData getWorldData();
 
+    void loadOrReplaceChunkData(int chunkX, int chunkY, int[][] tiles, List<WorldObject> objects);
+    void updateWorldObjectState(WorldObjectUpdate update);
     TileManager getTileManager();
     boolean createWorld(String worldName, long seed);
     void loadWorld(String worldName);
