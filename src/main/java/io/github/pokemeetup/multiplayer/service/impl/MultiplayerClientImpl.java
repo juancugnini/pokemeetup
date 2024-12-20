@@ -17,6 +17,7 @@ import io.github.pokemeetup.world.service.WorldService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -36,7 +37,9 @@ public class MultiplayerClientImpl implements MultiplayerClient {
     private Runnable pendingCreateUserRequest = null;
     private Runnable pendingLoginRequest = null;
     @Autowired
+    @Lazy
     private WorldService worldService;
+
 
     @Autowired
     public MultiplayerClientImpl(ApplicationEventPublisher eventPublisher) { // Modify constructor
