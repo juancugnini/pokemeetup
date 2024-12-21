@@ -7,14 +7,15 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.Array;
 import io.github.pokemeetup.player.model.PlayerDirection;
 import io.github.pokemeetup.player.service.PlayerAnimationService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+
+import java.util.Comparator;
 
 
 @Service
+@Slf4j
 public class PlayerAnimationServiceImpl implements PlayerAnimationService {
-    private static final Logger logger = LoggerFactory.getLogger(PlayerAnimationServiceImpl.class);
 
 
     private static final float WALK_FRAME_DURATION = 0.06f;
@@ -49,7 +50,6 @@ public class PlayerAnimationServiceImpl implements PlayerAnimationService {
             case DOWN -> standingDown;
             case LEFT -> standingLeft;
             case RIGHT -> standingRight;
-            default -> standingDown;
         };
     }
 
@@ -60,19 +60,18 @@ public class PlayerAnimationServiceImpl implements PlayerAnimationService {
             case DOWN -> running ? runDown : walkDown;
             case LEFT -> running ? runLeft : walkLeft;
             case RIGHT -> running ? runRight : walkRight;
-            default -> walkDown;
         };
     }
 
     
     private void loadAnimations() {
         String atlasPath = "assets/atlas/boy-gfx-atlas";
-        logger.info("Loading TextureAtlas from path: {}", atlasPath);
+        log.info("Loading TextureAtlas from path: {}", atlasPath);
         TextureAtlas atlas = new TextureAtlas(Gdx.files.internal(atlasPath));
 
-        logger.info("Available regions in the atlas:");
+        log.info("Available regions in the atlas:");
         for (TextureAtlas.AtlasRegion region : atlas.getRegions()) {
-            logger.info("- {} (index: {})", region.name, region.index);
+            log.info("- {} (index: {})", region.name, region.index);
         }
 
         walkUp = createLoopAnimation(atlas, "boy_walk_up", WALK_FRAME_DURATION);
@@ -103,18 +102,18 @@ public class PlayerAnimationServiceImpl implements PlayerAnimationService {
     private Animation<TextureRegion> createLoopAnimation(TextureAtlas atlas, String baseName, float duration) {
         Array<TextureAtlas.AtlasRegion> regions = atlas.findRegions(baseName);
         if (regions.size == 0) {
-            logger.error("No regions found for animation: {}", baseName);
+            log.error("No regions found for animation: {}", baseName);
             throw new RuntimeException("No regions found for animation: " + baseName);
         }
 
-        regions.sort((a, b) -> Integer.compare(a.index, b.index));
+        regions.sort(Comparator.comparingInt(a -> a.index));
 
 
-        logger.info("Creating animation '{}', frames: {}, frameDuration: {}",
+        log.info("Creating animation '{}', frames: {}, frameDuration: {}",
                 baseName, regions.size, duration);
 
         Animation<TextureRegion> anim = new Animation<>(duration, regions, Animation.PlayMode.LOOP);
-        logger.debug("Created loop animation: {}", baseName);
+        log.debug("Created loop animation: {}", baseName);
         return anim;
     }
 

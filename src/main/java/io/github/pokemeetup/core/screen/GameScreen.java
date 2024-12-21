@@ -65,7 +65,6 @@ public class GameScreen implements Screen {
     private float cameraPosX, cameraPosY;
     private Image pauseOverlay;
     private InputMultiplexer multiplexer;
-    private float otherPlayersStateTime = 0f;
 
     @Autowired
     public GameScreen(PlayerService playerService,
@@ -274,45 +273,68 @@ public class GameScreen implements Screen {
         hudStage.act(delta);
     }
 
-    private void renderGame(float delta) {
-        otherPlayersStateTime += delta;
 
+    private void renderGame(float delta) {
+        // Clear
         Gdx.gl.glClearColor(0, 0, 0, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
+        // Draw world
         worldRenderer.render(camera, delta);
 
+        // 1) Draw local player
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
         playerService.render(batch);
+
+        // 2) Draw remote players with updated animation time
         Map<String, PlayerSyncData> states = multiplayerClient.getPlayerStates();
         String localUsername = playerService.getPlayerData().getUsername();
 
         for (Map.Entry<String, PlayerSyncData> entry : states.entrySet()) {
             String otherUsername = entry.getKey();
-            if (otherUsername.equals(localUsername)) continue;
-            PlayerSyncData psd = entry.getValue();
-            float px = psd.getX() * 32;
-            float py = psd.getY() * 32;
+            if (otherUsername.equals(localUsername)) continue; // skip local
 
-            PlayerDirection dir = PlayerDirection.valueOf(psd.getDirection());
-            animationService.initAnimationsIfNeeded();
-            TextureRegion frame = animationService.getCurrentFrame(dir, psd.isMoving(), psd.isRunning(), otherPlayersStateTime);
+            PlayerSyncData psd = entry.getValue();
+
+            // If the remote player is moving, increment their animation time
+            if (psd.isMoving()) {
+                psd.setAnimationTime(psd.getAnimationTime() + delta);
+            }
+
+            float px = psd.getX() * TILE_SIZE;
+            float py = psd.getY() * TILE_SIZE;
+
+            // Convert syncData's direction to enum
+            PlayerDirection dir = PlayerDirection.DOWN;
+            try {
+                dir = PlayerDirection.valueOf(psd.getDirection().toUpperCase());
+            } catch (Exception ignored) {}
+
+            // Grab the frame
+            TextureRegion frame = animationService.getCurrentFrame(
+                    dir,
+                    psd.isMoving(),
+                    psd.isRunning(),
+                    psd.getAnimationTime()
+            );
             batch.draw(frame, px, py);
         }
+
         batch.end();
 
+        // Additional layered rendering if needed
         worldRenderer.renderTreeTops(delta);
 
+        // Draw pause overlay if paused
         if (paused) {
             pauseStage.draw();
         }
 
         hudStage.act(delta);
-
-
         hudStage.draw();
 
+        // Optional debug info
         if (showDebug) {
             renderDebugInfo();
         }
@@ -366,7 +388,6 @@ public class GameScreen implements Screen {
         font.draw(batch, "Biome: " + getBiomeName(pixelX, pixelY), 10, y);
         y += 20;
         font.draw(batch, "Direction: " + player.getDirection(), 10, y);
-        y += 20;
 
         batch.end();
     }

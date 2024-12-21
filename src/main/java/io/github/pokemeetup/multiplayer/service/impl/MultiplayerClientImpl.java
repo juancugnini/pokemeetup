@@ -6,7 +6,6 @@ import com.esotericsoftware.kryonet.Connection;
 import com.esotericsoftware.kryonet.Listener;
 import io.github.pokemeetup.NetworkProtocol;
 import io.github.pokemeetup.chat.event.ChatMessageReceivedEvent;
-import io.github.pokemeetup.chat.service.ChatService;
 import io.github.pokemeetup.multiplayer.model.ChunkUpdate;
 import io.github.pokemeetup.multiplayer.model.PlayerSyncData;
 import io.github.pokemeetup.multiplayer.service.MultiplayerClient;
@@ -203,10 +202,7 @@ public class MultiplayerClientImpl implements MultiplayerClient {
             cUp.setObjects(chunkData.getObjects());
             loadedChunks.put(chunkData.getChunkX() + "," + chunkData.getChunkY(), cUp);
 
-            // The local world should now render these updates.
-            Gdx.app.postRunnable(() -> {
-                worldService.loadOrReplaceChunkData(chunkData.getChunkX(), chunkData.getChunkY(), chunkData.getTiles(), chunkData.getObjects());
-            });
+            Gdx.app.postRunnable(() -> worldService.loadOrReplaceChunkData(chunkData.getChunkX(), chunkData.getChunkY(), chunkData.getTiles(), chunkData.getObjects()));
         } else if (object instanceof NetworkProtocol.WorldObjectsUpdate wObjects) {
             wObjects.getObjects().forEach(update -> {
                 String key = (update.getTileX() / 16) + "," + (update.getTileY() / 16);
@@ -249,34 +245,44 @@ public class MultiplayerClientImpl implements MultiplayerClient {
         }
     }
 
-    private void updateLocalPlayersFromServerStates() {
 
+    private void updateLocalPlayersFromServerStates() {
         for (Map.Entry<String, PlayerSyncData> entry : playerStates.entrySet()) {
             String username = entry.getKey();
             PlayerSyncData syncData = entry.getValue();
 
-            // Retrieve or create PlayerData for this player
             PlayerData localPD = worldService.getPlayerData(username);
             if (localPD == null) {
                 localPD = new PlayerData(username, syncData.getX(), syncData.getY());
                 worldService.setPlayerData(localPD);
             }
 
-            // Update the local player data with server state
             localPD.setX(syncData.getX());
             localPD.setY(syncData.getY());
             localPD.setWantsToRun(syncData.isRunning());
             localPD.setMoving(syncData.isMoving());
-
             try {
-                localPD.setDirection(io.github.pokemeetup.player.model.PlayerDirection.valueOf(syncData.getDirection().toUpperCase()));
+                localPD.setDirection(io.github.pokemeetup.player.model.PlayerDirection.valueOf(
+                        syncData.getDirection().toUpperCase()
+                ));
             } catch (IllegalArgumentException e) {
-                log.error("Invalid direction '{}' for player '{}'", syncData.getDirection(), username, e);
+                log.error("Invalid direction '{}' for player '{}'",
+                        syncData.getDirection(), username, e);
             }
 
+            boolean directionChanged = (syncData.getLastDirection() == null ||
+                    !syncData.getLastDirection().equalsIgnoreCase(syncData.getDirection()));
+            boolean movementChanged = (syncData.isMoving() != syncData.isWasMoving());
+
+            if (directionChanged || movementChanged) {
+                syncData.setAnimationTime(0f);
+            }
+
+            // 3. Update "wasMoving" / "lastDirection" with the new state
+            syncData.setWasMoving(syncData.isMoving());
+            syncData.setLastDirection(syncData.getDirection());
         }
     }
-
 
 
     @Override

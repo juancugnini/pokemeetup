@@ -16,20 +16,17 @@ import java.util.Map;
 public class SettingsService {
     private static final String PREFS_NAME = "pokemeetup_settings";
     private final InputConfiguration inputConfig;
+    private final float DEFAULT_MUSIC_VOLUME = 0.7f;
+    private final float DEFAULT_SOUND_VOLUME = 1.0f;
+    private final boolean DEFAULT_VSYNC = true;
+    private final int DEFAULT_RENDER_DISTANCE = 12;
+    private final boolean DEFAULT_PARTICLES = true;
+    private final boolean DEFAULT_SMOOTH_LIGHTING = true;
     private Preferences prefs;
     private GameSettings currentSettings;
     private boolean initialized = false;
-
     @Getter
     private Map<String, Integer> keyBindings;
-
-
-    private static final float DEFAULT_MUSIC_VOLUME = 0.7f;
-    private static final float DEFAULT_SOUND_VOLUME = 1.0f;
-    private static final boolean DEFAULT_VSYNC = true;
-    private static final int DEFAULT_RENDER_DISTANCE = 12;
-    private static final boolean DEFAULT_PARTICLES = true;
-    private static final boolean DEFAULT_SMOOTH_LIGHTING = true;
 
     public SettingsService(InputConfiguration inputConfig) {
         this.inputConfig = inputConfig;
@@ -155,6 +152,7 @@ public class SettingsService {
         }
         updateInputConfiguration();
     }
+
     public float getMusicVolume() {
         if (initialized && prefs != null) {
             return prefs.getFloat("music_volume", currentSettings.getMusicVolume());
