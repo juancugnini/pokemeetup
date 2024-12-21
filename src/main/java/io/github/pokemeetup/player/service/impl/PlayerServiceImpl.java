@@ -16,15 +16,14 @@ import io.github.pokemeetup.player.service.PlayerService;
 import io.github.pokemeetup.world.model.ChunkData;
 import io.github.pokemeetup.world.model.WorldObject;
 import io.github.pokemeetup.world.service.WorldService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.ArrayList;
 import java.util.List;
 
+@Slf4j
 public class PlayerServiceImpl implements PlayerService {
-    private static final Logger logger = LoggerFactory.getLogger(PlayerServiceImpl.class);
 
     private final PlayerModel playerModel;
     private final PlayerAnimationService animationService;
@@ -59,8 +58,9 @@ public class PlayerServiceImpl implements PlayerService {
 
     @Override
     public void move(PlayerDirection direction) {
+        // If currently mid-move, buffer the new direction for after finishing
         if (playerModel.isMoving()) {
-            logger.debug("Currently moving. Buffering direction: {}", direction);
+            log.debug("Currently moving. Buffering direction: {}", direction);
             this.bufferedDirection = direction;
             return;
         }
@@ -72,9 +72,9 @@ public class PlayerServiceImpl implements PlayerService {
         int currentTileX = (int) (currentX / tileSize);
         int currentTileY = (int) (currentY / tileSize);
 
+        // Calculate the attempted tile
         int targetTileX = currentTileX;
         int targetTileY = currentTileY;
-
         switch (direction) {
             case UP -> targetTileY += 1;
             case DOWN -> targetTileY -= 1;
@@ -82,15 +82,19 @@ public class PlayerServiceImpl implements PlayerService {
             case RIGHT -> targetTileX += 1;
         }
 
+        // Always set direction, so we appear to face that way even if blocked
         playerModel.setDirection(direction);
 
         if (isColliding(targetTileX, targetTileY)) {
-            logger.debug("Collision detected at tile ({}, {}), movement blocked.", targetTileX, targetTileY);
+            log.debug("Collision at ({}, {}): no movement, but direction updated to {}",
+                    targetTileX, targetTileY, direction);
+            // No movement, remain idle, but direction is changed
+            playerModel.setMoving(false);
             return;
         }
 
+        // If passable, we do run/walk
         playerModel.setRunning(inputService.isRunning());
-
         float targetX = targetTileX * tileSize;
         float targetY = targetTileY * tileSize;
 
@@ -100,12 +104,15 @@ public class PlayerServiceImpl implements PlayerService {
         float duration = playerModel.isRunning() ? runStepDuration : walkStepDuration;
         playerModel.setMovementDuration(duration);
 
+        // Reset state times
         playerModel.setStateTime(0f);
         playerModel.setMovementTime(0f);
         playerModel.setMoving(true);
 
-        logger.debug("Initiated movement: {}, Target=({}, {}), Duration={}", direction, targetX, targetY, duration);
+        log.debug("Initiated movement: {}, Target=({}, {}), Duration={}",
+                direction, targetX, targetY, duration);
     }
+
 
     private boolean isColliding(int tileX, int tileY) {
         int chunkX = tileX / 16;
@@ -144,7 +151,7 @@ public class PlayerServiceImpl implements PlayerService {
             Rectangle collisionBox = obj.getCollisionBox();
             if (collisionBox == null) continue;
             if (collisionBox.overlaps(targetTileRect)) {
-                logger.debug("Collision detected with object {} at tile ({}, {})", obj.getId(), tileX, tileY);
+                log.debug("Collision detected with object {} at tile ({}, {})", obj.getId(), tileX, tileY);
                 return true;
             }
         }
@@ -249,7 +256,7 @@ public class PlayerServiceImpl implements PlayerService {
         int tileY = (int) data.getY();
         setPosition(tileX, tileY);
 
-        logger.debug("Player data updated: username={}, x={}, y={}", data.getUsername(), data.getX(), data.getY());
+        log.debug("Player data updated: username={}, x={}, y={}", data.getUsername(), data.getX(), data.getY());
 
         worldService.setPlayerData(data);
     }
@@ -257,7 +264,7 @@ public class PlayerServiceImpl implements PlayerService {
     @Override
     public void setRunning(boolean running) {
         playerModel.setRunning(running);
-        logger.debug("Set running to {}", running);
+        log.debug("Set running to {}", running);
     }
 
     @Override
@@ -271,6 +278,6 @@ public class PlayerServiceImpl implements PlayerService {
         playerModel.setMovementTime(0f);
         playerModel.setStateTime(0f);
         this.bufferedDirection = null;
-        logger.debug("Set position to ({}, {})", x, y);
+        log.debug("Set position to ({}, {})", x, y);
     }
 }

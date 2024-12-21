@@ -288,16 +288,18 @@ public class GameScreen implements Screen {
         playerService.render(batch);
 
         // 2) Draw remote players with updated animation time
+        // In renderGame:
         Map<String, PlayerSyncData> states = multiplayerClient.getPlayerStates();
         String localUsername = playerService.getPlayerData().getUsername();
 
         for (Map.Entry<String, PlayerSyncData> entry : states.entrySet()) {
             String otherUsername = entry.getKey();
-            if (otherUsername.equals(localUsername)) continue; // skip local
+            // Skip local
+            if (otherUsername.equals(localUsername)) continue;
 
             PlayerSyncData psd = entry.getValue();
 
-            // If the remote player is moving, increment their animation time
+            // If the remote is moving, increment their local animation timer
             if (psd.isMoving()) {
                 psd.setAnimationTime(psd.getAnimationTime() + delta);
             }
@@ -305,13 +307,12 @@ public class GameScreen implements Screen {
             float px = psd.getX() * TILE_SIZE;
             float py = psd.getY() * TILE_SIZE;
 
-            // Convert syncData's direction to enum
             PlayerDirection dir = PlayerDirection.DOWN;
             try {
                 dir = PlayerDirection.valueOf(psd.getDirection().toUpperCase());
             } catch (Exception ignored) {}
 
-            // Grab the frame
+            // We pass 'psd.isMoving()' to get the correct standing vs. walking/running frames
             TextureRegion frame = animationService.getCurrentFrame(
                     dir,
                     psd.isMoving(),
@@ -320,6 +321,7 @@ public class GameScreen implements Screen {
             );
             batch.draw(frame, px, py);
         }
+
 
         batch.end();
 

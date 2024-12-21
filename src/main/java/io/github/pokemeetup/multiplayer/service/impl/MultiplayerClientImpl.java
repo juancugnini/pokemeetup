@@ -260,6 +260,7 @@ public class MultiplayerClientImpl implements MultiplayerClient {
             localPD.setY(syncData.getY());
             localPD.setWantsToRun(syncData.isRunning());
             localPD.setMoving(syncData.isMoving());
+
             try {
                 localPD.setDirection(io.github.pokemeetup.player.model.PlayerDirection.valueOf(
                         syncData.getDirection().toUpperCase()
@@ -269,15 +270,14 @@ public class MultiplayerClientImpl implements MultiplayerClient {
                         syncData.getDirection(), username, e);
             }
 
-            boolean directionChanged = (syncData.getLastDirection() == null ||
-                    !syncData.getLastDirection().equalsIgnoreCase(syncData.getDirection()));
+            boolean directionChanged = (syncData.getLastDirection() == null
+                    || !syncData.getLastDirection().equalsIgnoreCase(syncData.getDirection()));
             boolean movementChanged = (syncData.isMoving() != syncData.isWasMoving());
 
             if (directionChanged || movementChanged) {
                 syncData.setAnimationTime(0f);
             }
 
-            // 3. Update "wasMoving" / "lastDirection" with the new state
             syncData.setWasMoving(syncData.isMoving());
             syncData.setLastDirection(syncData.getDirection());
         }

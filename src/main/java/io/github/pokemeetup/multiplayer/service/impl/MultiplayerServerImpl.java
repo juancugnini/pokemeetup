@@ -181,21 +181,23 @@ public class MultiplayerServerImpl implements MultiplayerServer {
         PlayerData pd = worldService.getPlayerData(username);
         if (pd == null) return;
 
-        // If position changed, consider player moving:
-        boolean wasDifferent = (pd.getX() != moveReq.getX() || pd.getY() != moveReq.getY());
-        pd.setX(moveReq.getX());
-        pd.setY(moveReq.getY());
-        pd.setWantsToRun(moveReq.isRunning());
-        pd.setMoving(wasDifferent); // Set true if player actually moved a tile
         try {
-            pd.setDirection(io.github.pokemeetup.player.model.PlayerDirection.valueOf(moveReq.getDirection().toUpperCase()));
+            pd.setDirection(io.github.pokemeetup.player.model.PlayerDirection.valueOf(
+                    moveReq.getDirection().toUpperCase()
+            ));
         } catch (IllegalArgumentException e) {
             log.error("Invalid direction '{}'", moveReq.getDirection());
         }
 
+        boolean positionChanged = (pd.getX() != moveReq.getX() || pd.getY() != moveReq.getY());
+
+        pd.setX(moveReq.getX());
+        pd.setY(moveReq.getY());
+        pd.setWantsToRun(moveReq.isRunning());
+        pd.setMoving(positionChanged);
+
         worldService.setPlayerData(pd);
 
-        // Broadcast updated states right now:
         broadcastPlayerStates();
     }
 
