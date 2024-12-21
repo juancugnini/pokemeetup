@@ -201,7 +201,6 @@ public class MultiplayerClientImpl implements MultiplayerClient {
             cUp.setTiles(chunkData.getTiles());
             cUp.setObjects(chunkData.getObjects());
             loadedChunks.put(chunkData.getChunkX() + "," + chunkData.getChunkY(), cUp);
-
             Gdx.app.postRunnable(() -> worldService.loadOrReplaceChunkData(chunkData.getChunkX(), chunkData.getChunkY(), chunkData.getTiles(), chunkData.getObjects()));
         } else if (object instanceof NetworkProtocol.WorldObjectsUpdate wObjects) {
             wObjects.getObjects().forEach(update -> {
