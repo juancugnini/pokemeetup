@@ -8,8 +8,6 @@ import io.github.pokemeetup.player.service.PlayerService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import javax.lang.model.type.PrimitiveType;
-
 @Component
 @Slf4j
 public class TeleportPositionCommand implements Command {
@@ -54,8 +52,8 @@ public class TeleportPositionCommand implements Command {
                 return;
             }
 
-            Integer tileX = Integer.parseInt(argsArray[0]);
-            Integer tileY = Integer.parseInt(argsArray[1]);
+            int tileX = Integer.parseInt(argsArray[0]);
+            int tileY = Integer.parseInt(argsArray[1]);
 
             player.setX(tileX * 32);
             player.setY(tileY * 32);
