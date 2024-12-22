@@ -64,7 +64,7 @@ public class TeleportPositionCommand implements Command {
             }
             chatService.addSystemMessage("Teleported to spawn point!");
         } catch (Exception e) {
-            log.error("Error: " + e.getMessage());
+            log.error("Error executing tp command: " + e.getMessage());
         }
     }
 }
