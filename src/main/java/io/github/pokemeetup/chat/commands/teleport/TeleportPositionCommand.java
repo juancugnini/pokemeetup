@@ -8,6 +8,8 @@ import io.github.pokemeetup.player.service.PlayerService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import javax.lang.model.type.PrimitiveType;
+
 @Component
 @Slf4j
 public class TeleportPositionCommand implements Command {
