@@ -1,4 +1,4 @@
-package io.github.pokemeetup.world.service.impl;
+package io.github.pokemeetup.world.service.impl.client;
 
 import io.github.pokemeetup.world.biome.model.Biome;
 import io.github.pokemeetup.world.model.ObjectType;
@@ -17,8 +17,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 @Service
 @Profile("client")
-public class WorldObjectManagerImpl implements WorldObjectManager {
-    private static final Logger logger = LoggerFactory.getLogger(WorldObjectManagerImpl.class);
+public class ClientWorldObjectManagerImpl implements WorldObjectManager {
+    private static final Logger logger = LoggerFactory.getLogger(ClientWorldObjectManagerImpl.class);
 
     private static final int CHUNK_SIZE = 16;
 

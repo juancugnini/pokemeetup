@@ -1,4 +1,4 @@
-package io.github.pokemeetup.world.service.impl;
+package io.github.pokemeetup.world.service.impl.client;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.files.FileHandle;
@@ -27,9 +27,9 @@ import io.github.pokemeetup.world.service.TileManager;
 import io.github.pokemeetup.world.service.WorldGenerator;
 import io.github.pokemeetup.world.service.WorldObjectManager;
 import io.github.pokemeetup.world.service.WorldService;
+import io.github.pokemeetup.world.service.impl.BaseWorldServiceImpl;
+import io.github.pokemeetup.world.service.impl.ObjectTextureManager;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;

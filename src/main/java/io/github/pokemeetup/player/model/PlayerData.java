@@ -19,7 +19,7 @@ public class PlayerData {
     private PlayerDirection direction = PlayerDirection.DOWN;
     private String worldName;
     @Transient
-    private WorldData worldData;
+    private WorldData currentWorld;
 
     public PlayerData() {}
 
@@ -29,7 +29,7 @@ public class PlayerData {
         this.y = y;
         this.wantsToRun = false;
         this.moving = false;
-        this.worldData = worldData;
+        this.currentWorld = worldData;
         this.worldName = worldData.getWorldName();
     }
 }

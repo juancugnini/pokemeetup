@@ -1,4 +1,4 @@
-package io.github.pokemeetup.world.service.impl;
+package io.github.pokemeetup.world.service.impl.server;
 
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.math.Rectangle;
@@ -9,7 +9,6 @@ import io.github.pokemeetup.player.repository.PlayerDataRepository;
 import io.github.pokemeetup.world.biome.config.BiomeConfigurationLoader;
 import io.github.pokemeetup.world.biome.model.Biome;
 import io.github.pokemeetup.world.biome.model.BiomeType;
-import io.github.pokemeetup.world.config.WorldConfig;
 import io.github.pokemeetup.world.model.*;
 import io.github.pokemeetup.world.repository.ChunkRepository;
 import io.github.pokemeetup.world.repository.WorldMetadataRepository;
@@ -17,6 +16,7 @@ import io.github.pokemeetup.world.service.TileManager;
 import io.github.pokemeetup.world.service.WorldGenerator;
 import io.github.pokemeetup.world.service.WorldObjectManager;
 import io.github.pokemeetup.world.service.WorldService;
+import io.github.pokemeetup.world.service.impl.BaseWorldServiceImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;

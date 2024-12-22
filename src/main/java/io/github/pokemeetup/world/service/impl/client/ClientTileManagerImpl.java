@@ -1,4 +1,4 @@
-package io.github.pokemeetup.world.service.impl;
+package io.github.pokemeetup.world.service.impl.client;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.g2d.TextureAtlas;

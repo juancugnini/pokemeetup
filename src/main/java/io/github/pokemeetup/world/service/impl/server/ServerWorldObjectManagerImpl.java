@@ -1,4 +1,4 @@
-package io.github.pokemeetup.world.service.impl;
+package io.github.pokemeetup.world.service.impl.server;
 
 import io.github.pokemeetup.world.biome.model.Biome;
 import io.github.pokemeetup.world.model.ObjectType;

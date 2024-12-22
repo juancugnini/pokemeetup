@@ -33,7 +33,7 @@ public class PlayerSyncData {
         sync.setRunning(pd.isWantsToRun());
         sync.setDirection(pd.getDirection() != null ? pd.getDirection().name() : "DOWN");
         sync.setMoving(pd.isMoving());
-        sync.setWorldData(pd.getWorldData());
+        sync.setWorldData(pd.getCurrentWorld());
         return sync;
     }
 }
