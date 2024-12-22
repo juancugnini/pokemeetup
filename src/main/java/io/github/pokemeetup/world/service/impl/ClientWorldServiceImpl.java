@@ -390,7 +390,7 @@ public class ClientWorldServiceImpl extends BaseWorldServiceImpl implements Worl
         if (pd == null) {
             pd = playerDataRepository.findByUsername(username);
             if (pd == null) {
-                pd = new PlayerData(username, 0, 0);
+                pd = new PlayerData(username, 0, 0, worldData);
                 playerDataRepository.save(pd);
             }
             worldData.getPlayers().put(username, pd);

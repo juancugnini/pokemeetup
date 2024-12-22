@@ -1,5 +1,6 @@
 package io.github.pokemeetup.multiplayer.model;
 
+import io.github.pokemeetup.world.model.WorldData;
 import lombok.Getter;
 import lombok.Setter;
 import io.github.pokemeetup.player.model.PlayerData;
@@ -17,6 +18,7 @@ public class PlayerSyncData {
     private boolean running;
     private String direction;
     private boolean moving;
+    private WorldData worldData;
 
     private float animationTime = 0f;
 
@@ -31,6 +33,7 @@ public class PlayerSyncData {
         sync.setRunning(pd.isWantsToRun());
         sync.setDirection(pd.getDirection() != null ? pd.getDirection().name() : "DOWN");
         sync.setMoving(pd.isMoving());
+        sync.setWorldData(pd.getWorldData());
         return sync;
     }
 }

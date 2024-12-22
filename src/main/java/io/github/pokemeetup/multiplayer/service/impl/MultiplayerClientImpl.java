@@ -252,7 +252,7 @@ public class MultiplayerClientImpl implements MultiplayerClient {
 
             PlayerData localPD = worldService.getPlayerData(username);
             if (localPD == null) {
-                localPD = new PlayerData(username, syncData.getX(), syncData.getY());
+                localPD = new PlayerData(username, syncData.getX(), syncData.getY(), syncData.getWorldData());
                 worldService.setPlayerData(localPD);
             }
 

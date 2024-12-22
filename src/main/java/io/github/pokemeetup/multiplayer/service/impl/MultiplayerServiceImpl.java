@@ -33,7 +33,7 @@ public class MultiplayerServiceImpl implements MultiplayerService {
         worldService.initIfNeeded();
         PlayerData pd = worldService.getPlayerData(username);
         if (pd == null) {
-            pd = new PlayerData(username, 0, 0);
+            pd = new PlayerData(username, 0, 0, worldService.getWorldData());
             worldService.setPlayerData(pd);
         }
         connectedPlayers.add(username);
