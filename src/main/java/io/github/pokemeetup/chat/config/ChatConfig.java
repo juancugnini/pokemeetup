@@ -1,6 +1,7 @@
 package io.github.pokemeetup.chat.config;
 
-import io.github.pokemeetup.chat.commands.SpawnCommand;
+import io.github.pokemeetup.chat.commands.teleport.SpawnCommand;
+import io.github.pokemeetup.chat.commands.teleport.TeleportPositionCommand;
 import io.github.pokemeetup.chat.service.CommandService;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,9 +15,12 @@ public class ChatConfig {
 
     @Autowired
     private SpawnCommand spawnCommand;
+    @Autowired
+    private TeleportPositionCommand tpPos;
 
     @PostConstruct
     public void registerCommands() {
         commandService.registerCommand(spawnCommand);
+        commandService.registerCommand(tpPos);
     }
 }

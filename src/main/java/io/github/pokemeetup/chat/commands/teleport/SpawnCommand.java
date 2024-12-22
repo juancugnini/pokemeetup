@@ -1,5 +1,6 @@
-package io.github.pokemeetup.chat.commands;
+package io.github.pokemeetup.chat.commands.teleport;
 
+import io.github.pokemeetup.chat.commands.Command;
 import io.github.pokemeetup.chat.service.ChatService;
 import io.github.pokemeetup.multiplayer.service.MultiplayerClient;
 import io.github.pokemeetup.player.model.PlayerData;
