@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
+import java.util.Random;
 
 @Service
 public class WorldGeneratorImpl implements WorldGenerator {
@@ -42,12 +43,13 @@ public class WorldGeneratorImpl implements WorldGenerator {
 
     @Override
     public int[][] generateChunk(int chunkX, int chunkY) {
+        // Optionally get the biome for the chunk
         Biome biome = getBiomeForChunk(chunkX, chunkY);
         int chunkSize = config.getChunkSize();
 
         int[][] tiles = new int[chunkSize][chunkSize];
         if (biome == null) {
-
+            // Fallback if no biome found
             for (int x = 0; x < chunkSize; x++) {
                 for (int y = 0; y < chunkSize; y++) {
                     tiles[x][y] = 1;
@@ -56,12 +58,12 @@ public class WorldGeneratorImpl implements WorldGenerator {
             return tiles;
         }
 
-
+        Random chunkRandom = new Random(seed ^ (chunkX * 341_757L) ^ (chunkY * 132_721L));
         double total = biome.getTileDistribution().values().stream().mapToDouble(Double::doubleValue).sum();
 
         for (int x = 0; x < chunkSize; x++) {
             for (int y = 0; y < chunkSize; y++) {
-                double roll = MathUtils.random((float) total);
+                double roll = chunkRandom.nextDouble() * total;
                 double cumulative = 0;
                 for (Map.Entry<Integer, Double> entry : biome.getTileDistribution().entrySet()) {
                     cumulative += entry.getValue();
@@ -74,4 +76,5 @@ public class WorldGeneratorImpl implements WorldGenerator {
         }
         return tiles;
     }
+
 }

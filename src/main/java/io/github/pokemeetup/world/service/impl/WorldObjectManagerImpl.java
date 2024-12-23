@@ -54,7 +54,8 @@ public class WorldObjectManagerImpl implements WorldObjectManager {
             return objects;
         }
 
-        Random random = new Random((chunkX * 341L + chunkY * 773L) ^ seed);
+        long combinedSeed = seed * 31 + chunkX * 341873128712L + chunkY * 132897987541L;
+        Random random = new Random(combinedSeed);
         int chunkSize = tiles.length;
 
         for (String objName : biome.getSpawnableObjects()) {

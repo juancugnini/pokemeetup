@@ -1,13 +1,9 @@
 package io.github.pokemeetup.player.model;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
 import lombok.Data;
 
 @Data
-@Entity
 public class PlayerData {
-    @Id
     private String username;
 
     private float x;

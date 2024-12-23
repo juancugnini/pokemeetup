@@ -18,6 +18,7 @@ import io.github.pokemeetup.audio.service.AudioService;
 import io.github.pokemeetup.core.service.ScreenManager;
 import io.github.pokemeetup.world.model.WorldData;
 import io.github.pokemeetup.world.service.WorldService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -28,6 +29,7 @@ import java.util.List;
 import java.util.Random;
 
 @Component
+@Slf4j
 public class WorldSelectionScreen implements Screen {
     private final AudioService audioService;
     private final WorldService worldService;
@@ -157,11 +159,13 @@ public class WorldSelectionScreen implements Screen {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 if (selectedWorldName != null) {
+                    log.debug("PLAY requested for world '{}'", selectedWorldName);
                     worldService.loadWorld(selectedWorldName);
                     screenManager.showScreen(GameScreen.class);
                 }
             }
         });
+
 
         deleteButton.addListener(new ClickListener() {
             @Override

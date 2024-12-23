@@ -24,6 +24,7 @@ import java.util.List;
 
 @Slf4j
 public class PlayerServiceImpl implements PlayerService {
+    public final int TILE_SIZE = 32;
 
     private final PlayerModel playerModel;
     private final PlayerAnimationService animationService;
@@ -67,7 +68,7 @@ public class PlayerServiceImpl implements PlayerService {
 
         float currentX = playerModel.getPosition().x;
         float currentY = playerModel.getPosition().y;
-        float tileSize = PlayerModel.TILE_SIZE;
+        float tileSize = TILE_SIZE;
 
         int currentTileX = (int) (currentX / tileSize);
         int currentTileY = (int) (currentY / tileSize);
@@ -82,7 +83,7 @@ public class PlayerServiceImpl implements PlayerService {
             case RIGHT -> targetTileX += 1;
         }
 
-        // Always set direction, so we appear to face that way even if blocked
+        // Always set direction so we appear to face that way even if blocked
         playerModel.setDirection(direction);
 
         if (isColliding(targetTileX, targetTileY)) {
@@ -104,9 +105,12 @@ public class PlayerServiceImpl implements PlayerService {
         float duration = playerModel.isRunning() ? runStepDuration : walkStepDuration;
         playerModel.setMovementDuration(duration);
 
-        // Reset state times
-        playerModel.setStateTime(0f);
+        // DO NOT reset stateTime, so the animation doesn't restart every step:
+        // playerModel.setStateTime(0f);
+
+        // We still reset movementTime for tile interpolation:
         playerModel.setMovementTime(0f);
+
         playerModel.setMoving(true);
 
         log.debug("Initiated movement: {}, Target=({}, {}), Duration={}",
@@ -129,7 +133,7 @@ public class PlayerServiceImpl implements PlayerService {
             return true;
         }
 
-        float tileSize = PlayerModel.TILE_SIZE;
+        float tileSize = TILE_SIZE;
         Rectangle targetTileRect = new Rectangle(tileX * tileSize, tileY * tileSize, tileSize, tileSize);
 
         List<WorldObject> nearbyObjects = new ArrayList<>();
@@ -241,8 +245,8 @@ public class PlayerServiceImpl implements PlayerService {
 
     @Override
     public PlayerData getPlayerData() {
-        float tileX = playerModel.getPosition().x / PlayerModel.TILE_SIZE;
-        float tileY = playerModel.getPosition().y / PlayerModel.TILE_SIZE;
+        float tileX = playerModel.getPosition().x / TILE_SIZE;
+        float tileY = playerModel.getPosition().y / TILE_SIZE;
         return new PlayerData(username, tileX, tileY);
     }
 
@@ -269,8 +273,8 @@ public class PlayerServiceImpl implements PlayerService {
 
     @Override
     public void setPosition(int tileX, int tileY) {
-        float x = tileX * PlayerModel.TILE_SIZE;
-        float y = tileY * PlayerModel.TILE_SIZE;
+        float x = tileX * TILE_SIZE;
+        float y = tileY * TILE_SIZE;
         playerModel.setPosition(x, y);
         playerModel.setStartPosition(x, y);
         playerModel.setTargetPosition(x, y);

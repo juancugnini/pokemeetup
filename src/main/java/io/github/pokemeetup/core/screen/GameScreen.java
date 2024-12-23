@@ -37,9 +37,8 @@ import java.util.Map;
 @Component
 @Slf4j
 public class GameScreen implements Screen {
-    private static final float TARGET_VIEWPORT_WIDTH_TILES = 24f;
-    private static final int TILE_SIZE = 32;
-    private static final float CAMERA_LERP_FACTOR = 0.1f;
+    private final float TARGET_VIEWPORT_WIDTH_TILES = 24f;
+    private final int TILE_SIZE = 32;
     private final PlayerService playerService;
     private final WorldService worldService;
     private final AudioService audioService;
@@ -93,6 +92,18 @@ public class GameScreen implements Screen {
 
     @Override
     public void show() {
+        log.debug("GameScreen.show() >> current worldName={}, seed={}",
+                worldService.getWorldData().getWorldName(),
+                worldService.getWorldData().getSeed());
+
+        // Who is the current player?
+        PlayerData pd = playerService.getPlayerData().getUsername() != null
+                ? playerService.getPlayerData()
+                : null;
+        if (pd != null) {
+            log.debug("Player data: username={}, x={}, y={}",
+                    pd.getUsername(), pd.getX(), pd.getY());
+        }
         animationService.initAnimationsIfNeeded();
         if (worldRenderer != null) {
             worldRenderer.initialize();
@@ -209,18 +220,32 @@ public class GameScreen implements Screen {
     }
 
     private void initializePlayerPosition() {
-        PlayerData pData = worldService.getPlayerData(playerService.getPlayerData().getUsername());
-        if (pData == null) {
-            playerService.setPosition(0, 0);
+        String playerName = playerService.getPlayerData().getUsername();
+        PlayerData pd = worldService.getPlayerData(playerName);
+        log.debug("initializePlayerPosition -> from worldService: username={}, x={}, y={}",
+                pd != null ? pd.getUsername() : "(null)",
+                pd != null ? pd.getX() : 0f,
+                pd != null ? pd.getY() : 0f);
+
+        if (pd == null) {
+            pd = new PlayerData(playerName, 0, 0);
+            playerService.setPlayerData(pd);
+            log.debug("No existing PD => created new at (0,0)");
         } else {
-            playerService.setPosition((int) pData.getX(), (int) pData.getY());
+            log.debug("Setting position to PD's tile coords = ({}, {})", (int) pd.getX(), (int) pd.getY());
+            playerService.setPosition((int) pd.getX(), (int) pd.getY());
         }
 
-        float px = playerService.getPlayerData().getX() * TILE_SIZE + TILE_SIZE / 2f;
-        float py = playerService.getPlayerData().getY() * TILE_SIZE + TILE_SIZE / 2f;
-        cameraPosX = px;
-        cameraPosY = py;
+        float playerPixelX = pd.getX() * TILE_SIZE + TILE_SIZE / 2f;
+        float playerPixelY = pd.getY() * TILE_SIZE + TILE_SIZE / 2f;
+        cameraPosX = playerPixelX;
+        cameraPosY = playerPixelY;
+        camera.position.set(cameraPosX, cameraPosY, 0);
+        camera.update();
     }
+
+
+
 
     @Override
     public void render(float delta) {
@@ -265,8 +290,6 @@ public class GameScreen implements Screen {
             );
             playerService.update(delta);
 
-
-            worldService.setPlayerData(playerService.getPlayerData());
         }
 
         pauseStage.act(delta);
@@ -400,6 +423,7 @@ public class GameScreen implements Screen {
     }
 
     private float lerp(float a, float b) {
+        float CAMERA_LERP_FACTOR = 0.1f;
         return a + (b - a) * CAMERA_LERP_FACTOR;
     }
 

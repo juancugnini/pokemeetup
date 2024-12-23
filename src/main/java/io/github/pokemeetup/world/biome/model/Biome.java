@@ -8,7 +8,7 @@ import java.util.Map;
 
 @Getter
 public class Biome {
-    private String name;
+    private final String name;
 
     private BiomeType type;
 

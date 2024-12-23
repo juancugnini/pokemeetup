@@ -1,36 +1,41 @@
 package io.github.pokemeetup.world.service.impl;
 
+
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import io.github.pokemeetup.multiplayer.model.WorldObjectUpdate;
 import io.github.pokemeetup.player.model.PlayerData;
-import io.github.pokemeetup.player.repository.PlayerDataRepository;
 import io.github.pokemeetup.world.biome.config.BiomeConfigurationLoader;
 import io.github.pokemeetup.world.biome.model.Biome;
 import io.github.pokemeetup.world.biome.model.BiomeType;
-import io.github.pokemeetup.world.config.WorldConfig;
-import io.github.pokemeetup.world.model.*;
-import io.github.pokemeetup.world.repository.ChunkRepository;
-import io.github.pokemeetup.world.repository.WorldMetadataRepository;
+import io.github.pokemeetup.world.config.WorldObjectConfig;
+import io.github.pokemeetup.world.model.ChunkData;
+import io.github.pokemeetup.world.model.ObjectType;
+import io.github.pokemeetup.world.model.WorldData;
+import io.github.pokemeetup.world.model.WorldObject;
 import io.github.pokemeetup.world.service.TileManager;
 import io.github.pokemeetup.world.service.WorldGenerator;
 import io.github.pokemeetup.world.service.WorldObjectManager;
 import io.github.pokemeetup.world.service.WorldService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
+@Slf4j
 @Primary
 @Profile("server")
 public class ServerWorldServiceImpl extends BaseWorldServiceImpl implements WorldService {
-    private static final Logger logger = LoggerFactory.getLogger(ServerWorldServiceImpl.class);
     private static final int TILE_SIZE = 32;
     private static final int CHUNK_SIZE = 16;
 
@@ -38,44 +43,48 @@ public class ServerWorldServiceImpl extends BaseWorldServiceImpl implements Worl
     private final WorldObjectManager worldObjectManager;
     private final TileManager tileManager;
     private final BiomeConfigurationLoader biomeLoader;
-    private final WorldMetadataRepository worldMetadataRepo;
-    private final PlayerDataRepository playerDataRepository;
-    private final ChunkRepository chunkRepository;
+
+    private final JsonWorldDataService jsonWorldDataService; // NEW
 
     private final WorldData worldData = new WorldData();
+    private final Map<String, WorldData> loadedWorlds = new ConcurrentHashMap<>();
     private boolean initialized = false;
-
     @Value("${world.defaultName:defaultWorld}")
     private String defaultWorldName;
 
-    // Since server typically doesn't render, we can store a dummy camera if needed:
     private OrthographicCamera camera = null;
 
-    public ServerWorldServiceImpl(WorldGenerator worldGenerator,
-                                  WorldObjectManager worldObjectManager,
-                                  TileManager tileManager,
-                                  BiomeConfigurationLoader biomeLoader,
-                                  WorldMetadataRepository worldMetadataRepo,
-                                  PlayerDataRepository playerDataRepository,
-                                  ChunkRepository chunkRepository) {
+    public ServerWorldServiceImpl(
+            WorldGenerator worldGenerator,
+            WorldObjectManager worldObjectManager,
+            TileManager tileManager,
+            BiomeConfigurationLoader biomeLoader,
+            JsonWorldDataService jsonWorldDataService
+    ) {
         this.worldGenerator = worldGenerator;
         this.worldObjectManager = worldObjectManager;
         this.tileManager = tileManager;
         this.biomeLoader = biomeLoader;
-        this.worldMetadataRepo = worldMetadataRepo;
-        this.playerDataRepository = playerDataRepository;
-        this.chunkRepository = chunkRepository;
+        this.jsonWorldDataService = jsonWorldDataService;
     }
 
     @Override
     public void initIfNeeded() {
-        if (!initialized && worldData.getSeed() != 0) {
-            Map<BiomeType, Biome> biomes = biomeLoader.loadBiomes("config/biomes.json");
-            worldGenerator.setSeedAndBiomes(worldData.getSeed(), biomes);
-            worldObjectManager.initialize();
-            tileManager.initIfNeeded();
-            initialized = true;
-            logger.info("WorldService (server) initialized with seed {}", worldData.getSeed());
+        if (!loadedWorlds.containsKey("serverWorld")) {
+            try {
+                WorldData wd = new WorldData();
+                jsonWorldDataService.loadWorld("serverWorld", wd);
+                loadedWorlds.put("serverWorld", wd);
+            } catch (IOException e) {
+                WorldData newWorld = new WorldData();
+                newWorld.setWorldName("serverWorld");
+                try {
+                    jsonWorldDataService.saveWorld(newWorld);
+                } catch (IOException ex) {
+                    ex.printStackTrace();
+                }
+                loadedWorlds.put("serverWorld", newWorld);
+            }
         }
     }
 
@@ -89,150 +98,127 @@ public class ServerWorldServiceImpl extends BaseWorldServiceImpl implements Worl
         return tileManager;
     }
 
+    // ------------------------------
+    // Saving and Loading from JSON
+    // ------------------------------
     @Override
     public void loadWorldData() {
-        Optional<WorldMetadata> optMeta = worldMetadataRepo.findById(defaultWorldName);
-        if (optMeta.isEmpty()) {
-            logger.warn("No default world '{}' found in Cassandra for server. Please create a world or specify another default world.", defaultWorldName);
-            return;
+        // Instead of querying from DB, load from JSON
+        try {
+            jsonWorldDataService.loadWorld(defaultWorldName, worldData);
+            initIfNeeded();
+            log.info("Loaded default world data for '{}' from JSON (server)", defaultWorldName);
+        } catch (IOException e) {
+            log.warn("Failed to load default world '{}': {}", defaultWorldName, e.getMessage());
         }
-
-        WorldMetadata meta = optMeta.get();
-        worldData.setWorldName(meta.getWorldName());
-        worldData.setSeed(meta.getSeed());
-        worldData.setCreatedDate(meta.getCreatedDate());
-        worldData.setLastPlayed(System.currentTimeMillis());
-        worldData.setPlayedTime(meta.getPlayedTime());
-
-        initIfNeeded();
-
-        playerDataRepository.findAll().forEach(pd -> {
-            worldData.getPlayers().put(pd.getUsername(), pd);
-        });
-
-        logger.info("Loaded default world data for '{}' from Cassandra (server)", defaultWorldName);
     }
 
     @Override
     public boolean createWorld(String worldName, long seed) {
-        if (worldMetadataRepo.findById(worldName).isPresent()) {
-            logger.warn("World '{}' already exists, cannot create", worldName);
+        // We simply set in-memory and call save
+        if (jsonWorldDataService.worldExists(worldName)) {
+            log.warn("World '{}' already exists, cannot create", worldName);
             return false;
         }
 
-        WorldMetadata meta = new WorldMetadata();
-        meta.setWorldName(worldName);
-        meta.setSeed(seed);
         long now = System.currentTimeMillis();
-        meta.setCreatedDate(now);
-        meta.setLastPlayed(now);
-        meta.setPlayedTime(0);
-        worldMetadataRepo.save(meta);
-
         worldData.setWorldName(worldName);
         worldData.setSeed(seed);
         worldData.setCreatedDate(now);
         worldData.setLastPlayed(now);
         worldData.setPlayedTime(0);
 
-        logger.info("Created new world '{}' with seed {} in Cassandra (server)", worldName, seed);
+        // Immediately save to JSON
+        try {
+            jsonWorldDataService.saveWorld(worldData);
+        } catch (IOException e) {
+            log.error("Failed to create new world '{}': {}", worldName, e.getMessage());
+            return false;
+        }
+        log.info("Created new world '{}' with seed {} in JSON (server)", worldName, seed);
         return true;
     }
 
     @Override
     public void saveWorldData() {
-        if (worldData.getWorldName() == null || worldData.getWorldName().isEmpty()) {
-            logger.info("No world loaded on server, nothing to save.");
-            return;
+        WorldData wd = loadedWorlds.get("serverWorld");
+        if (wd != null) {
+            try {
+                jsonWorldDataService.saveWorld(wd);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
-
-        Optional<WorldMetadata> optionalMeta = worldMetadataRepo.findById(worldData.getWorldName());
-        WorldMetadata meta = optionalMeta.orElse(new WorldMetadata());
-
-        meta.setWorldName(worldData.getWorldName());
-        meta.setSeed(worldData.getSeed());
-        meta.setCreatedDate(worldData.getCreatedDate());
-        meta.setLastPlayed(System.currentTimeMillis());
-        meta.setPlayedTime(worldData.getPlayedTime());
-        worldMetadataRepo.save(meta);
-
-
-        for (PlayerData pd : worldData.getPlayers().values()) {
-            playerDataRepository.save(pd);
-        }
-
-        for (Map.Entry<String, ChunkData> entry : worldData.getChunks().entrySet()) {
-            String[] parts = entry.getKey().split(",");
-            int cx = Integer.parseInt(parts[0]);
-            int cy = Integer.parseInt(parts[1]);
-            ChunkData cData = entry.getValue();
-            cData.setKey(new ChunkData.ChunkKey(cx, cy));
-            chunkRepository.save(cData);
-        }
-
-        logger.info("Saved world data for '{}' to Cassandra (server)", worldData.getWorldName());
     }
 
     @Override
     public void loadWorld(String worldName) {
-        Optional<WorldMetadata> optMeta = worldMetadataRepo.findById(worldName);
-        if (optMeta.isEmpty()) {
-            logger.warn("World '{}' does not exist in Cassandra (server).", worldName);
-            return;
+        try {
+            jsonWorldDataService.loadWorld(worldName, worldData);
+            initIfNeeded();
+            log.info("Loaded world data for '{}' from JSON (server)", worldName);
+        } catch (IOException e) {
+            log.warn("World '{}' does not exist in JSON or failed to load: {}", worldName, e.getMessage());
         }
-
-        WorldMetadata meta = optMeta.get();
-        worldData.setWorldName(meta.getWorldName());
-        worldData.setSeed(meta.getSeed());
-        worldData.setCreatedDate(meta.getCreatedDate());
-        worldData.setLastPlayed(System.currentTimeMillis());
-        worldData.setPlayedTime(meta.getPlayedTime());
-
-        initIfNeeded();
-
-        playerDataRepository.findAll().forEach(pd -> {
-            worldData.getPlayers().put(pd.getUsername(), pd);
-        });
-
-        logger.info("Loaded world data for '{}' from Cassandra (server)", worldName);
     }
 
+    // Return chunk tiles from loaded chunk or generate if missing
     @Override
     public int[][] getChunkTiles(int chunkX, int chunkY) {
+        WorldData wd = loadedWorlds.get("serverWorld");
+        if (wd == null) return null;
+
         String key = chunkX + "," + chunkY;
-        if (!worldData.getChunks().containsKey(key)) {
-            loadOrGenerateChunk(chunkX, chunkY);
+        if (!wd.getChunks().containsKey(key)) {
+            try {
+                var chunkData = jsonWorldDataService.loadChunk("serverWorld", chunkX, chunkY);
+                if (chunkData != null) {
+                    wd.getChunks().put(key, chunkData);
+                    return chunkData.getTiles();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            return null;
         }
-        ChunkData cData = worldData.getChunks().get(key);
-        return cData != null ? cData.getTiles() : null;
+        return wd.getChunks().get(key).getTiles();
     }
 
     private void loadOrGenerateChunk(int chunkX, int chunkY) {
         String key = chunkX + "," + chunkY;
-        Optional<ChunkData> opt = chunkRepository.findById(new ChunkData.ChunkKey(chunkX, chunkY));
-        if (opt.isPresent()) {
-            ChunkData cData = opt.get();
-
-            if (cData.getObjects() != null) {
-                cData.setObjects(new ArrayList<>(cData.getObjects()));
+        // 1) Attempt to load from JSON
+        try {
+            ChunkData loaded = jsonWorldDataService.loadChunk(worldData.getWorldName(), chunkX, chunkY);
+            if (loaded != null) {
+                worldObjectManager.loadObjectsForChunk(chunkX, chunkY, loaded.getObjects());
+                worldData.getChunks().put(key, loaded);
+                return;
             }
-
-            worldObjectManager.loadObjectsForChunk(chunkX, chunkY, cData.getObjects());
-            worldData.getChunks().put(key, cData);
-            return;
+        } catch (IOException e) {
+            log.warn("Failed reading chunk from JSON: {}", e.getMessage());
         }
 
-
+        // 2) Not found or no chunk file => generate
         int[][] tiles = worldGenerator.generateChunk(chunkX, chunkY);
         ChunkData cData = new ChunkData();
-        cData.setKey(new ChunkData.ChunkKey(chunkX, chunkY));
+        cData.setChunkX(chunkX);
+        cData.setChunkY(chunkY);
+
         cData.setTiles(tiles);
 
         Biome biome = worldGenerator.getBiomeForChunk(chunkX, chunkY);
-        List<WorldObject> objs = worldObjectManager.generateObjectsForChunk(chunkX, chunkY, tiles, biome, worldData.getSeed());
+        List<WorldObject> objs =
+                worldObjectManager.generateObjectsForChunk(chunkX, chunkY, tiles, biome, worldData.getSeed());
         cData.setObjects(objs);
+
         worldData.getChunks().put(key, cData);
-        chunkRepository.save(cData);
+
+        // 3) Save newly generated chunk to JSON
+        try {
+            jsonWorldDataService.saveChunk(worldData.getWorldName(), cData);
+        } catch (IOException e) {
+            log.error("Failed to save newly generated chunk: {}", e.getMessage());
+        }
     }
 
     @Override
@@ -248,6 +234,7 @@ public class ServerWorldServiceImpl extends BaseWorldServiceImpl implements Worl
 
     @Override
     public List<WorldObject> getVisibleObjects(Rectangle viewBounds) {
+        // Implementation unchanged, except no DB call
         List<WorldObject> visibleObjects = new ArrayList<>();
         Map<String, ChunkData> visibleChunks = getVisibleChunks(viewBounds);
         for (ChunkData chunk : visibleChunks.values()) {
@@ -260,6 +247,7 @@ public class ServerWorldServiceImpl extends BaseWorldServiceImpl implements Worl
 
     @Override
     public Map<String, ChunkData> getVisibleChunks(Rectangle viewBounds) {
+        // Implementation is basically the same
         Map<String, ChunkData> visibleChunks = new HashMap<>();
 
         int startChunkX = (int) Math.floor(viewBounds.x / (CHUNK_SIZE * TILE_SIZE));
@@ -284,41 +272,52 @@ public class ServerWorldServiceImpl extends BaseWorldServiceImpl implements Worl
     }
 
     @Override
-    public void setPlayerData(PlayerData playerData) {
-        worldData.getPlayers().put(playerData.getUsername(), playerData);
-        playerDataRepository.save(playerData);
+    public void setPlayerData(PlayerData pd) {
+        WorldData wd = loadedWorlds.get("serverWorld");
+        if (wd == null) return;
+        wd.getPlayers().put(pd.getUsername(), pd);
+        try {
+            jsonWorldDataService.savePlayerData("serverWorld", pd);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
+
+
 
     @Override
     public PlayerData getPlayerData(String username) {
-        PlayerData pd = worldData.getPlayers().get(username);
-        if (pd == null) {
-            pd = playerDataRepository.findByUsername(username);
-            if (pd == null) {
-                pd = new PlayerData(username, 0, 0);
-                playerDataRepository.save(pd);
+        WorldData wd = loadedWorlds.get("serverWorld");
+        if (wd == null) return null;
+        PlayerData existing = wd.getPlayers().get(username);
+        if (existing != null) return existing;
+        try {
+            PlayerData pd = jsonWorldDataService.loadPlayerData("serverWorld", username);
+            if (pd != null) {
+                wd.getPlayers().put(username, pd);
             }
-            worldData.getPlayers().put(username, pd);
+            return pd;
+        } catch (IOException e) {
+            return null;
         }
-        return pd;
     }
+
 
     @Override
     public List<String> getAvailableWorlds() {
-        List<String> worlds = new ArrayList<>();
-        worldMetadataRepo.findAll().forEach(meta -> worlds.add(meta.getWorldName()));
-        return worlds;
+        return jsonWorldDataService.listAllWorlds();
     }
 
     @Override
     public void deleteWorld(String worldName) {
-        if (worldMetadataRepo.findById(worldName).isEmpty()) {
-            logger.warn("World '{}' does not exist in Cassandra, cannot delete (server)", worldName);
+        if (!jsonWorldDataService.worldExists(worldName)) {
+            log.warn("World '{}' does not exist in JSON, cannot delete (server)", worldName);
             return;
         }
 
-        worldMetadataRepo.deleteById(worldName);
+        jsonWorldDataService.deleteWorld(worldName);
 
+        // If it’s the currently loaded world, clear it
         if (worldData.getWorldName() != null && worldData.getWorldName().equals(worldName)) {
             worldData.setWorldName(null);
             worldData.setSeed(0);
@@ -327,96 +326,96 @@ public class ServerWorldServiceImpl extends BaseWorldServiceImpl implements Worl
             worldData.setCreatedDate(0);
             worldData.setLastPlayed(0);
             worldData.setPlayedTime(0);
-            logger.info("Cleared current loaded world data because it was deleted (server).");
+            log.info("Cleared current loaded world data because it was deleted (server).");
         }
-        logger.info("Deleted world '{}' from Cassandra (server)", worldName);
+        log.info("Deleted world '{}' from JSON (server)", worldName);
     }
 
     @Override
     public void regenerateChunk(int chunkX, int chunkY) {
         String key = chunkX + "," + chunkY;
         worldData.getChunks().remove(key);
-        chunkRepository.deleteById(new ChunkData.ChunkKey(chunkX, chunkY));
+        // Also delete chunk JSON if present
+        jsonWorldDataService.deleteChunk(worldData.getWorldName(), chunkX, chunkY);
         loadOrGenerateChunk(chunkX, chunkY);
     }
 
     @Override
     public void generateWorldThumbnail(String worldName) {
-        logger.info("Skipping world thumbnail generation on server.");
+        log.info("Skipping world thumbnail generation on server.");
     }
 
-    // Implementations of the missing methods
 
     @Override
-    public void loadOrReplaceChunkData(int chunkX, int chunkY, int[][] tiles, List<WorldObject> objects) {
+    public void loadOrReplaceChunkData(int chunkX, int chunkY, int[][] tiles,
+                                       java.util.List<WorldObject> objects) {
+        WorldData wd = loadedWorlds.get("serverWorld");
+        if (wd == null) return;
         String key = chunkX + "," + chunkY;
-        ChunkData cData = new ChunkData();
-        cData.setKey(new ChunkData.ChunkKey(chunkX, chunkY));
-        cData.setTiles(tiles);
-        cData.setObjects(objects);
-        worldData.getChunks().put(key, cData);
-        logger.info("Replaced/Loaded chunk ({}, {}) with {} objects.", chunkX, chunkY, objects != null ? objects.size() : 0);
+        var chunk = wd.getChunks().get(key);
+        if (chunk == null) {
+            chunk = new io.github.pokemeetup.world.model.ChunkData();
+            chunk.setChunkX(chunkX);
+            chunk.setChunkY(chunkY);
+            wd.getChunks().put(key, chunk);
+        }
+        chunk.setTiles(tiles);
+        chunk.setObjects(objects);
+        try {
+            jsonWorldDataService.saveChunk("serverWorld", chunk);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
-
     @Override
     public void updateWorldObjectState(WorldObjectUpdate update) {
-        String key = (update.getTileX() / 16) + "," + (update.getTileY() / 16);
-        ChunkData chunk = worldData.getChunks().get(key);
-        if (chunk == null) {
-            logger.warn("No chunk found for ({}, {}) to update object {}.", update.getTileX()/16, update.getTileY()/16, update.getObjectId());
-            return;
-        }
+        // Example: move or remove an object in the chunk
+        WorldData wd = loadedWorlds.get("serverWorld");
+        if (wd == null) return;
+        String chunkKey = (update.getTileX() / 16) + "," + (update.getTileY() / 16);
 
-        List<WorldObject> objs = chunk.getObjects();
-        if (objs == null) {
-            objs = new ArrayList<>();
-            chunk.setObjects(objs);
-        }
-
-        if (update.isRemoved()) {
-            boolean removed = objs.removeIf(o -> o.getId().equals(update.getObjectId()));
-            if (removed) {
-                logger.info("Removed object {} from chunk {}", update.getObjectId(), key);
-            }
-        } else {
-            // Check if object already exists
-            boolean found = false;
-            for (WorldObject wo : objs) {
-                if (wo.getId().equals(update.getObjectId())) {
+        var chunkData = wd.getChunks().get(chunkKey);
+        if (chunkData != null) {
+            if (update.isRemoved()) {
+                chunkData.getObjects().removeIf(o -> o.getId().equals(update.getObjectId()));
+            } else {
+                // Possibly find or create
+                var existing = chunkData.getObjects().stream()
+                        .filter(o -> o.getId().equals(update.getObjectId()))
+                        .findFirst();
+                if (existing.isPresent()) {
+                    // update position
+                    var wo = existing.get();
                     wo.setTileX(update.getTileX());
                     wo.setTileY(update.getTileY());
-                    found = true;
-                    logger.info("Updated object {} position in chunk {}", update.getObjectId(), key);
-                    break;
-                }
-            }
-            if (!found) {
-                try {
-                    ObjectType objType = ObjectType.valueOf(update.getType());
-                    WorldObject newObj = new WorldObject(
+                } else {
+                    // create new
+                    WorldObject obj = new WorldObject(
                             update.getTileX(),
                             update.getTileY(),
-                            objType,
-                            objType.isCollidable()
+                            // parse from update.getType()
+                            ObjectType.valueOf(update.getType()),
+                            true // or read from config
                     );
-                    objs.add(newObj);
-                    logger.info("Added new object {} of type {} in chunk {}", update.getObjectId(), update.getType(), key);
-                } catch (IllegalArgumentException e) {
-                    logger.error("Invalid object type '{}' for new object '{}'", update.getType(), update.getObjectId());
+                    obj.setId(update.getObjectId());
+                    chunkData.getObjects().add(obj);
                 }
             }
         }
+        // Optionally save chunk to disk
+        try {
+            jsonWorldDataService.saveChunk("serverWorld", chunkData);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
-
     @Override
     public OrthographicCamera getCamera() {
-        // Server typically does not have a camera.
         return camera;
     }
 
     @Override
     public void setCamera(OrthographicCamera camera) {
-        // No-op for server, we can store it but it has no real use here.
         this.camera = camera;
     }
 }

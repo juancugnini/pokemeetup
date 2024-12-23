@@ -14,28 +14,24 @@ import com.badlogic.gdx.math.Vector2;
 import io.github.pokemeetup.multiplayer.model.WorldObjectUpdate;
 import io.github.pokemeetup.multiplayer.service.MultiplayerClient;
 import io.github.pokemeetup.player.model.PlayerData;
-import io.github.pokemeetup.player.repository.PlayerDataRepository;
 import io.github.pokemeetup.world.biome.config.BiomeConfigurationLoader;
 import io.github.pokemeetup.world.biome.model.Biome;
 import io.github.pokemeetup.world.biome.model.BiomeType;
 import io.github.pokemeetup.world.biome.service.BiomeService;
 import io.github.pokemeetup.world.config.WorldConfig;
 import io.github.pokemeetup.world.model.*;
-import io.github.pokemeetup.world.repository.ChunkRepository;
-import io.github.pokemeetup.world.repository.WorldMetadataRepository;
 import io.github.pokemeetup.world.service.TileManager;
 import io.github.pokemeetup.world.service.WorldGenerator;
 import io.github.pokemeetup.world.service.WorldObjectManager;
 import io.github.pokemeetup.world.service.WorldService;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
 import java.util.*;
 
 @Slf4j
@@ -44,392 +40,50 @@ import java.util.*;
 public class ClientWorldServiceImpl extends BaseWorldServiceImpl implements WorldService {
     private static final int CHUNK_SIZE = 16;
     private static final int TILE_SIZE = 32;
-    private final WorldConfig worldConfig;
     private final WorldGenerator worldGenerator;
     private final WorldObjectManager worldObjectManager;
     private final TileManager tileManager;
     private final ObjectTextureManager objectTextureManager;
     private final BiomeConfigurationLoader biomeLoader;
     private final BiomeService biomeService;
-    private final WorldMetadataRepository worldMetadataRepo;
-    private final ChunkRepository chunkRepository;
-    private final PlayerDataRepository playerDataRepository;
+
+    private final JsonWorldDataService jsonWorldDataService;  // NEW
+
     private final WorldData worldData = new WorldData();
     @Value("${world.defaultName:defaultWorld}")
     private String defaultWorldName;
     @Value("${world.saveDir:assets/save/worlds/}")
     private String saveDir;
     private boolean initialized = false;
+
     @Autowired
     @Lazy
     private MultiplayerClient multiplayerClient;
+
     private boolean isMultiplayerMode = false;
 
-    public ClientWorldServiceImpl(WorldConfig worldConfig,
-                                  WorldGenerator worldGenerator,
-                                  WorldObjectManager worldObjectManager,
-                                  TileManager tileManager,
-                                  BiomeConfigurationLoader biomeLoader,
-                                  BiomeService biomeService,
-                                  WorldMetadataRepository worldMetadataRepo,
-                                  ChunkRepository chunkRepository,
-                                  PlayerDataRepository playerDataRepository, ObjectTextureManager objectTextureManager) {
-        this.worldConfig = worldConfig;
-        this.objectTextureManager = objectTextureManager;
+
+    public ClientWorldServiceImpl(
+            WorldConfig worldConfig,
+            WorldGenerator worldGenerator,
+            WorldObjectManager worldObjectManager,
+            TileManager tileManager,
+            BiomeConfigurationLoader biomeLoader,
+            BiomeService biomeService,
+            ObjectTextureManager objectTextureManager,
+            JsonWorldDataService jsonWorldDataService     // NEW
+    ) {
         this.worldGenerator = worldGenerator;
         this.worldObjectManager = worldObjectManager;
         this.tileManager = tileManager;
         this.biomeLoader = biomeLoader;
         this.biomeService = biomeService;
-        this.worldMetadataRepo = worldMetadataRepo;
-        this.chunkRepository = chunkRepository;
-        this.playerDataRepository = playerDataRepository;
+        // this.worldMetadataRepo = worldMetadataRepo;   // REMOVED
+        // this.chunkRepository = chunkRepository;       // REMOVED
+        // this.playerDataRepository = playerDataRepository; // REMOVED
+        this.objectTextureManager = objectTextureManager;
+        this.jsonWorldDataService = jsonWorldDataService; // NEW
     }
-
-    public void setMultiplayerMode(boolean multiplayer) {
-        this.isMultiplayerMode = multiplayer;
-    }
-
-    @Override
-    public void loadOrReplaceChunkData(int chunkX, int chunkY, int[][] tiles, List<WorldObject> objects) {
-        String key = chunkX + "," + chunkY;
-        ChunkData cData = new ChunkData();
-        cData.setKey(new ChunkData.ChunkKey(chunkX, chunkY));
-        cData.setTiles(tiles);
-        cData.setObjects(objects);
-        getWorldData().getChunks().put(key, cData);
-    }
-
-    @Override
-
-    public void updateWorldObjectState(WorldObjectUpdate update) {
-        String key = (update.getTileX() / 16) + "," + (update.getTileY() / 16);
-        ChunkData chunk = getWorldData().getChunks().get(key);
-        if (chunk == null) return; // Chunk not loaded yet?
-
-        List<WorldObject> objs = chunk.getObjects();
-        if (update.isRemoved()) {
-            objs.removeIf(o -> o.getId().equals(update.getObjectId()));
-        } else {
-            boolean found = false;
-            for (WorldObject wo : objs) {
-                if (wo.getId().equals(update.getObjectId())) {
-                    wo.setTileX(update.getTileX());
-                    wo.setTileY(update.getTileY());
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                ObjectType objType = ObjectType.valueOf(update.getType());
-                WorldObject newObj = new WorldObject(
-                        update.getTileX(),
-                        update.getTileY(),
-                        objType,
-                        objType.isCollidable()
-                );
-                objs.add(newObj);
-            }
-        }
-    }
-
-    @Override
-    public TileManager getTileManager() {
-        return this.tileManager;
-    }
-
-    @Override
-    public void initIfNeeded() {
-        if (!initialized) {
-            Map<BiomeType, Biome> biomes = biomeLoader.loadBiomes("assets/config/biomes.json");
-
-            if (worldData.getSeed() == 0) {
-                worldData.setSeed(worldConfig.getSeed());
-            }
-
-            long seed = worldData.getSeed();
-            worldGenerator.setSeedAndBiomes(seed, biomes);
-            biomeService.initWithSeed(seed);
-
-            worldObjectManager.initialize();
-            tileManager.initIfNeeded();
-            initialized = true;
-            log.info("WorldService (client) initialized with seed {}", seed);
-        }
-    }
-
-    @Override
-    public WorldData getWorldData() {
-        return worldData;
-    }
-
-    @Override
-    public boolean createWorld(String worldName, long seed) {
-        if (worldMetadataRepo.findById(worldName).isPresent()) {
-            log.warn("World '{}' already exists, cannot create", worldName);
-            return false;
-        }
-
-        WorldMetadata meta = new WorldMetadata();
-        meta.setWorldName(worldName);
-        meta.setSeed(seed);
-        long now = System.currentTimeMillis();
-        meta.setCreatedDate(now);
-        meta.setLastPlayed(now);
-        meta.setPlayedTime(0);
-        worldMetadataRepo.save(meta);
-
-        worldData.setWorldName(worldName);
-        worldData.setSeed(seed);
-        worldData.setCreatedDate(now);
-        worldData.setLastPlayed(now);
-        worldData.setPlayedTime(0);
-
-        log.info("Created new world '{}' with seed {}", worldName, seed);
-        return true;
-    }
-
-    @Override
-    public void saveWorldData() {
-        if (worldData.getWorldName() == null || worldData.getWorldName().isEmpty()) {
-            log.info("No world loaded, nothing to save.");
-            return;
-        }
-
-        Optional<WorldMetadata> optionalMeta = worldMetadataRepo.findById(worldData.getWorldName());
-        WorldMetadata meta = optionalMeta.orElseGet(WorldMetadata::new);
-
-        meta.setWorldName(worldData.getWorldName());
-        meta.setSeed(worldData.getSeed());
-        meta.setCreatedDate(worldData.getCreatedDate());
-        meta.setLastPlayed(System.currentTimeMillis());
-        meta.setPlayedTime(worldData.getPlayedTime());
-        worldMetadataRepo.save(meta);
-
-
-        for (PlayerData pd : worldData.getPlayers().values()) {
-            playerDataRepository.save(pd);
-        }
-
-
-        for (Map.Entry<String, ChunkData> entry : worldData.getChunks().entrySet()) {
-            String[] parts = entry.getKey().split(",");
-            int cx = Integer.parseInt(parts[0]);
-            int cy = Integer.parseInt(parts[1]);
-            ChunkData cData = entry.getValue();
-            ChunkData.ChunkKey cKey = new ChunkData.ChunkKey(cx, cy);
-            cData.setKey(cKey);
-            chunkRepository.save(cData);
-        }
-
-        log.info("Saved world data for '{}'", worldData.getWorldName());
-    }
-
-    @Override
-    public void loadWorld(String worldName) {
-        Optional<WorldMetadata> optionalMeta = worldMetadataRepo.findById(worldName);
-        if (optionalMeta.isEmpty()) {
-            log.warn("No such world '{}'", worldName);
-            return;
-        }
-
-        WorldMetadata meta = optionalMeta.get();
-        worldData.setWorldName(meta.getWorldName());
-        worldData.setSeed(meta.getSeed());
-        worldData.setCreatedDate(meta.getCreatedDate());
-        worldData.setLastPlayed(System.currentTimeMillis());
-        worldData.setPlayedTime(meta.getPlayedTime());
-
-        initIfNeeded();
-
-        playerDataRepository.findAll().forEach(pd -> {
-            worldData.getPlayers().put(pd.getUsername(), pd);
-        });
-
-        log.info("Loaded world data for world: {}", worldName);
-    }
-
-    @Override
-    public void loadWorldData() {
-        Optional<WorldMetadata> optMeta = worldMetadataRepo.findById(defaultWorldName);
-        if (optMeta.isEmpty()) {
-            log.warn("No default world '{}' found in Cassandra. Please create a world or specify another default world.", defaultWorldName);
-            return;
-        }
-
-        WorldMetadata meta = optMeta.get();
-        worldData.setWorldName(meta.getWorldName());
-        worldData.setSeed(meta.getSeed());
-        worldData.setCreatedDate(meta.getCreatedDate());
-        worldData.setLastPlayed(System.currentTimeMillis());
-        worldData.setPlayedTime(meta.getPlayedTime());
-
-        initIfNeeded();
-
-        playerDataRepository.findAll().forEach(pd -> {
-            worldData.getPlayers().put(pd.getUsername(), pd);
-        });
-
-        log.info("Loaded default world data for '{}' from Cassandra", defaultWorldName);
-    }
-
-    @Override
-    public int[][] getChunkTiles(int chunkX, int chunkY) {
-        String key = chunkX + "," + chunkY;
-        ChunkData cData = getWorldData().getChunks().get(key);
-        if (cData == null) {
-            if (isMultiplayerMode) {
-                // In multiplayer mode, do NOT generate locally. Just request and return null for now.
-                multiplayerClient.requestChunk(chunkX, chunkY);
-                return null;
-            } else {
-                // Singleplayer mode: generate or load chunk locally as before
-                loadOrGenerateChunk(chunkX, chunkY);
-                cData = getWorldData().getChunks().get(key);
-            }
-        }
-        return cData != null ? cData.getTiles() : null;
-    }
-
-    @Override
-    public Map<String, ChunkData> getVisibleChunks(Rectangle viewBounds) {
-        Map<String, ChunkData> visibleChunks = new HashMap<>();
-        int startChunkX = (int) Math.floor(viewBounds.x / (CHUNK_SIZE * TILE_SIZE));
-        int startChunkY = (int) Math.floor(viewBounds.y / (CHUNK_SIZE * TILE_SIZE));
-        int endChunkX = (int) Math.ceil((viewBounds.x + viewBounds.width) / (CHUNK_SIZE * TILE_SIZE));
-        int endChunkY = (int) Math.ceil((viewBounds.y + viewBounds.height) / (CHUNK_SIZE * TILE_SIZE));
-
-        for (int x = startChunkX; x <= endChunkX; x++) {
-            for (int y = startChunkY; y <= endChunkY; y++) {
-                String key = x + "," + y;
-                ChunkData chunk = worldData.getChunks().get(key);
-                if (chunk == null) {
-                    // Request it from server if not already requested
-                    multiplayerClient.requestChunk(x, y);
-                    continue; // It's not ready yet
-                }
-                visibleChunks.put(key, chunk);
-            }
-        }
-
-        return visibleChunks;
-    }
-
-    private void loadOrGenerateChunk(int chunkX, int chunkY) {
-        if (isMultiplayerMode) {
-            // Do nothing in multiplayer mode. We rely solely on server data.
-            return;
-        }
-
-        // Original singleplayer logic here:
-        String key = chunkX + "," + chunkY;
-        Optional<ChunkData> opt = chunkRepository.findById(new ChunkData.ChunkKey(chunkX, chunkY));
-        if (opt.isPresent()) {
-            ChunkData cData = opt.get();
-            if (cData.getObjects() != null) {
-                cData.setObjects(new ArrayList<>(cData.getObjects()));
-            }
-            worldObjectManager.loadObjectsForChunk(chunkX, chunkY, cData.getObjects());
-            getWorldData().getChunks().put(key, cData);
-            return;
-        }
-
-        int[][] tiles = worldGenerator.generateChunk(chunkX, chunkY);
-        ChunkData cData = new ChunkData();
-        cData.setKey(new ChunkData.ChunkKey(chunkX, chunkY));
-        cData.setTiles(tiles);
-        Biome biome = worldGenerator.getBiomeForChunk(chunkX, chunkY);
-        List<WorldObject> objs = worldObjectManager.generateObjectsForChunk(chunkX, chunkY, tiles, biome, getWorldData().getSeed());
-        cData.setObjects(objs);
-
-        getWorldData().getChunks().put(key, cData);
-        chunkRepository.save(cData);
-    }
-
-
-
-    @Override
-    public boolean isChunkLoaded(Vector2 chunkPos) {
-        String key = String.format("%d,%d", (int) chunkPos.x, (int) chunkPos.y);
-        return worldData.getChunks().containsKey(key);
-    }
-
-    @Override
-    public void loadChunk(Vector2 chunkPos) {
-        loadOrGenerateChunk((int) chunkPos.x, (int) chunkPos.y);
-    }
-
-    @Override
-    public List<WorldObject> getVisibleObjects(Rectangle viewBounds) {
-        List<WorldObject> visibleObjects = new ArrayList<>();
-        Map<String, ChunkData> visibleChunks = getVisibleChunks(viewBounds);
-        for (ChunkData chunk : visibleChunks.values()) {
-            if (chunk.getObjects() != null) {
-                for (WorldObject obj : chunk.getObjects()) {
-                    float pixelX = obj.getTileX() * TILE_SIZE;
-                    float pixelY = obj.getTileY() * TILE_SIZE;
-                    if (viewBounds.contains(pixelX, pixelY)) {
-                        visibleObjects.add(obj);
-                    }
-                }
-            }
-        }
-        return visibleObjects;
-    }
-
-
-    @Override
-    public void setPlayerData(PlayerData playerData) {
-        worldData.getPlayers().put(playerData.getUsername(), playerData);
-        playerDataRepository.save(playerData);
-    }
-
-    @Override
-    public PlayerData getPlayerData(String username) {
-        PlayerData pd = worldData.getPlayers().get(username);
-        if (pd == null) {
-            pd = playerDataRepository.findByUsername(username);
-            if (pd == null) {
-                pd = new PlayerData(username, 0, 0);
-                playerDataRepository.save(pd);
-            }
-            worldData.getPlayers().put(username, pd);
-        }
-        return pd;
-    }
-
-    @Override
-    public List<String> getAvailableWorlds() {
-        List<String> worlds = new ArrayList<>();
-        worldMetadataRepo.findAll().forEach(meta -> worlds.add(meta.getWorldName()));
-        return worlds;
-    }
-
-    @Override
-    public void deleteWorld(String worldName) {
-        worldMetadataRepo.deleteById(worldName);
-
-        if (worldData.getWorldName() != null && worldData.getWorldName().equals(worldName)) {
-            worldData.setWorldName(null);
-            worldData.setSeed(0);
-            worldData.getPlayers().clear();
-            worldData.getChunks().clear();
-            worldData.setCreatedDate(0);
-            worldData.setLastPlayed(0);
-            worldData.setPlayedTime(0);
-            log.info("Cleared current loaded world data because it was deleted.");
-        }
-        log.info("Deleted world '{}'", worldName);
-    }
-
-    @Override
-    public void regenerateChunk(int chunkX, int chunkY) {
-        String key = chunkX + "," + chunkY;
-        worldData.getChunks().remove(key);
-        chunkRepository.deleteById(new ChunkData.ChunkKey(chunkX, chunkY));
-        loadOrGenerateChunk(chunkX, chunkY);
-    }
-
 
     @Override
     public void generateWorldThumbnail(String worldName) {
@@ -549,4 +203,359 @@ public class ClientWorldServiceImpl extends BaseWorldServiceImpl implements Worl
         log.info("Generated world thumbnail for '{}'", worldName);
     }
 
+    public void setMultiplayerMode(boolean multiplayer) {
+        this.isMultiplayerMode = multiplayer;
+    }
+
+    @Override
+    public void loadOrReplaceChunkData(int chunkX, int chunkY, int[][] tiles, List<WorldObject> objects) {
+        String key = chunkX + "," + chunkY;
+        ChunkData cData = new ChunkData();cData.setChunkX(chunkX);
+        cData.setChunkY(chunkY);
+
+        cData.setTiles(tiles);
+        cData.setObjects(objects);
+        getWorldData().getChunks().put(key, cData);
+
+        // Save to JSON
+        try {
+            jsonWorldDataService.saveChunk(getWorldData().getWorldName(), cData);
+        } catch (IOException e) {
+            log.error("Failed to save chunk data for chunk {}: {}", key, e.getMessage());
+        }
+    }
+
+    @Override
+    public void updateWorldObjectState(WorldObjectUpdate update) {
+        String key = (update.getTileX() / 16) + "," + (update.getTileY() / 16);
+        ChunkData chunk = getWorldData().getChunks().get(key);
+        if (chunk == null) return; // chunk not loaded
+
+        List<WorldObject> objs = chunk.getObjects();
+        if (update.isRemoved()) {
+            objs.removeIf(o -> o.getId().equals(update.getObjectId()));
+        } else {
+            boolean found = false;
+            for (WorldObject wo : objs) {
+                if (wo.getId().equals(update.getObjectId())) {
+                    wo.setTileX(update.getTileX());
+                    wo.setTileY(update.getTileY());
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                ObjectType objType = ObjectType.valueOf(update.getType());
+                WorldObject newObj = new WorldObject(
+                        update.getTileX(),
+                        update.getTileY(),
+                        objType,
+                        objType.isCollidable()
+                );
+                objs.add(newObj);
+            }
+        }
+
+        // Save chunk
+        try {
+            jsonWorldDataService.saveChunk(getWorldData().getWorldName(), chunk);
+        } catch (IOException e) {
+            log.error("Failed to save chunk after updateWorldObjectState: {}", e.getMessage());
+        }
+    }
+
+    @Override
+    public TileManager getTileManager() {
+        return this.tileManager;
+    }
+
+    @Override
+    public void initIfNeeded() {
+        if (initialized) {
+            return;
+        }
+
+        Map<BiomeType, Biome> biomes = biomeLoader.loadBiomes("assets/config/biomes.json");
+        if (worldData.getSeed() == 0) {
+            long randomSeed = new Random().nextLong();
+            worldData.setSeed(randomSeed);
+            log.info("No existing seed found; using random seed: {}", randomSeed);
+        }
+
+        long seed = worldData.getSeed();
+        worldGenerator.setSeedAndBiomes(seed, biomes);
+        biomeService.initWithSeed(seed);
+
+        worldObjectManager.initialize();
+        tileManager.initIfNeeded();
+
+        initialized = true;
+        log.info("WorldService (client) initialized with seed {}", seed);
+    }
+
+    @Override
+    public WorldData getWorldData() {
+        return worldData;
+    }
+
+    @Override
+    public boolean createWorld(String worldName, long seed) {
+        // If it already exists on disk
+        if (jsonWorldDataService.worldExists(worldName)) {
+            log.warn("World '{}' already exists, cannot create", worldName);
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        worldData.setWorldName(worldName);
+        worldData.setSeed(seed);
+        worldData.setCreatedDate(now);
+        worldData.setLastPlayed(now);
+        worldData.setPlayedTime(0);
+
+        // Save
+        try {
+            jsonWorldDataService.saveWorld(worldData);
+        } catch (IOException e) {
+            log.error("Failed to create world '{}': {}", worldName, e.getMessage());
+            return false;
+        }
+        log.info("Created new world '{}' with seed {}", worldName, seed);
+        return true;
+    }
+
+    @Override
+    public void saveWorldData() {
+        if (worldData.getWorldName() == null || worldData.getWorldName().isEmpty()) {
+            log.info("No world loaded, nothing to save.");
+            return;
+        }
+
+        try {
+            worldData.setLastPlayed(System.currentTimeMillis());
+            jsonWorldDataService.saveWorld(worldData);
+            log.info("Saved world data for '{}'", worldData.getWorldName());
+        } catch (IOException e) {
+            log.error("Failed saving world '{}': {}", worldData.getWorldName(), e.getMessage());
+        }
+    }
+
+    public void loadWorld(String worldName) {
+        log.debug("loadWorld called with {}", worldName);
+
+        this.worldData.getChunks().clear();
+        this.worldData.getPlayers().clear();
+        this.worldData.setSeed(0);
+        this.initialized = false;
+
+        try {
+            jsonWorldDataService.loadWorld(worldName, this.worldData);
+            log.debug("World data read from disk: name={}, seed={}", worldData.getWorldName(), worldData.getSeed());
+            initIfNeeded();
+            log.info("Loaded world data for world: {}", worldName);
+        } catch (IOException e) {
+            log.warn("Failed to load world '{}': {}", worldName, e.getMessage());
+        }
+    }
+
+
+
+    @Override
+    public void loadWorldData() {
+        try {
+            jsonWorldDataService.loadWorld(defaultWorldName, worldData);
+            initIfNeeded();
+            log.info("Loaded default world data for '{}' from JSON", defaultWorldName);
+        } catch (IOException e) {
+            log.warn("No default world '{}' found in JSON: {}", defaultWorldName, e.getMessage());
+        }
+    }
+
+    @Override
+    public int[][] getChunkTiles(int chunkX, int chunkY) {
+        String key = chunkX + "," + chunkY;
+        ChunkData cData = getWorldData().getChunks().get(key);
+        if (cData == null) {
+            if (isMultiplayerMode) {
+                // Request from server if needed
+                multiplayerClient.requestChunk(chunkX, chunkY);
+                return null;
+            } else {
+                loadOrGenerateChunk(chunkX, chunkY);
+                cData = getWorldData().getChunks().get(key);
+            }
+        }
+        return (cData != null) ? cData.getTiles() : null;
+    }
+
+    @Override
+    public Map<String, ChunkData> getVisibleChunks(Rectangle viewBounds) {
+        Map<String, ChunkData> visibleChunks = new HashMap<>();
+        int startChunkX = (int) Math.floor(viewBounds.x / (CHUNK_SIZE * TILE_SIZE));
+        int startChunkY = (int) Math.floor(viewBounds.y / (CHUNK_SIZE * TILE_SIZE));
+        int endChunkX = (int) Math.ceil((viewBounds.x + viewBounds.width) / (CHUNK_SIZE * TILE_SIZE));
+        int endChunkY = (int) Math.ceil((viewBounds.y + viewBounds.height) / (CHUNK_SIZE * TILE_SIZE));
+
+        for (int x = startChunkX; x <= endChunkX; x++) {
+            for (int y = startChunkY; y <= endChunkY; y++) {
+                String key = x + "," + y;
+                ChunkData chunk = worldData.getChunks().get(key);
+                if (chunk == null) {
+                    // In client MP mode, request from server if not found
+                    if (isMultiplayerMode) {
+                        multiplayerClient.requestChunk(x, y);
+                        continue;
+                    } else {
+                        loadOrGenerateChunk(x, y);
+                        chunk = worldData.getChunks().get(key);
+                    }
+                }
+                if (chunk != null) {
+                    visibleChunks.put(key, chunk);
+                }
+            }
+        }
+        return visibleChunks;
+    }
+
+    private void loadOrGenerateChunk(int chunkX, int chunkY) {
+        if (isMultiplayerMode) {
+            return;
+        }
+        // 1) Attempt load from JSON
+        try {
+            ChunkData loaded = jsonWorldDataService.loadChunk(worldData.getWorldName(), chunkX, chunkY);
+            if (loaded != null) {
+                worldObjectManager.loadObjectsForChunk(chunkX, chunkY, loaded.getObjects());
+                worldData.getChunks().put(chunkX + "," + chunkY, loaded);
+                return;
+            }
+        } catch (IOException e) {
+            log.warn("Failed reading chunk from JSON: {}", e.getMessage());
+        }
+
+        // 2) Generate
+        int[][] tiles = worldGenerator.generateChunk(chunkX, chunkY);
+        ChunkData cData = new ChunkData();cData.setChunkX(chunkX);
+        cData.setChunkY(chunkY);
+
+        cData.setTiles(tiles);
+        Biome biome = worldGenerator.getBiomeForChunk(chunkX, chunkY);
+        List<WorldObject> objs = worldObjectManager.generateObjectsForChunk(
+                chunkX, chunkY, tiles, biome, getWorldData().getSeed());
+        cData.setObjects(objs);
+        worldData.getChunks().put(chunkX + "," + chunkY, cData);
+
+        // 3) Save
+        try {
+            jsonWorldDataService.saveChunk(worldData.getWorldName(), cData);
+        } catch (IOException e) {
+            log.error("Failed to save chunk for newly generated chunk: {}", e.getMessage());
+        }
+    }
+
+    @Override
+    public boolean isChunkLoaded(Vector2 chunkPos) {
+        String key = String.format("%d,%d", (int) chunkPos.x, (int) chunkPos.y);
+        return worldData.getChunks().containsKey(key);
+    }
+
+    @Override
+    public void loadChunk(Vector2 chunkPos) {
+        loadOrGenerateChunk((int) chunkPos.x, (int) chunkPos.y);
+    }
+
+    @Override
+    public List<WorldObject> getVisibleObjects(Rectangle viewBounds) {
+        List<WorldObject> visibleObjects = new ArrayList<>();
+        Map<String, ChunkData> visibleChunks = getVisibleChunks(viewBounds);
+        for (ChunkData chunk : visibleChunks.values()) {
+            if (chunk.getObjects() != null) {
+                for (WorldObject obj : chunk.getObjects()) {
+                    float pixelX = obj.getTileX() * TILE_SIZE;
+                    float pixelY = obj.getTileY() * TILE_SIZE;
+                    if (viewBounds.contains(pixelX, pixelY)) {
+                        visibleObjects.add(obj);
+                    }
+                }
+            }
+        }
+        return visibleObjects;
+    }
+
+    @Override
+    public void setPlayerData(PlayerData playerData) {
+        if (isMultiplayerMode) {
+            log.debug("Skipping local JSON save because we're in multiplayer mode.");
+            getWorldData().getPlayers().put(playerData.getUsername(), playerData);
+            return;
+        }
+
+        String wName = getWorldData().getWorldName();
+        if (wName == null || wName.isEmpty()) {
+            wName = "defaultLocalWorld";
+            getWorldData().setWorldName(wName);
+            log.warn("Client had no local worldName set; using '{}'.", wName);
+        }
+
+        getWorldData().getPlayers().put(playerData.getUsername(), playerData);
+        try {
+            jsonWorldDataService.savePlayerData(wName, playerData);
+        } catch (IOException e) {
+            log.error("Failed to save player data: {}", e.getMessage());
+        }
+    }
+
+
+    @Override
+    public PlayerData getPlayerData(String username) {
+        PlayerData pd = getWorldData().getPlayers().get(username);
+        if (pd == null) {
+            String wName = getWorldData().getWorldName();
+            try {
+                pd = jsonWorldDataService.loadPlayerData(wName, username);
+                if (pd == null) {
+                    pd = new PlayerData(username, 0, 0);
+                    jsonWorldDataService.savePlayerData(wName, pd);
+                }
+                getWorldData().getPlayers().put(username, pd);
+            } catch (IOException e) {
+                log.error("Failed to load or create player data for {}: {}", username, e.getMessage());
+            }
+        }
+        return pd;
+    }
+
+
+    @Override
+    public List<String> getAvailableWorlds() {
+        return jsonWorldDataService.listAllWorlds();
+    }
+
+    @Override
+    public void deleteWorld(String worldName) {
+        if (!jsonWorldDataService.worldExists(worldName)) {
+            log.warn("World '{}' does not exist, cannot delete", worldName);
+            return;
+        }
+        jsonWorldDataService.deleteWorld(worldName);
+        if (worldData.getWorldName() != null && worldData.getWorldName().equals(worldName)) {
+            worldData.setWorldName(null);
+            worldData.setSeed(0);
+            worldData.getPlayers().clear();
+            worldData.getChunks().clear();
+            worldData.setCreatedDate(0);
+            worldData.setLastPlayed(0);
+            worldData.setPlayedTime(0);
+            log.info("Cleared current loaded world data because it was deleted.");
+        }
+        log.info("Deleted world '{}'", worldName);
+    }
+
+    @Override
+    public void regenerateChunk(int chunkX, int chunkY) {
+        String key = chunkX + "," + chunkY;
+        worldData.getChunks().remove(key);
+        jsonWorldDataService.deleteChunk(worldData.getWorldName(), chunkX, chunkY);
+        loadOrGenerateChunk(chunkX, chunkY);
+    }
 }

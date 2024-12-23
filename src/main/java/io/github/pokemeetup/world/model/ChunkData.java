@@ -1,36 +1,31 @@
 package io.github.pokemeetup.world.model;
 
-import jakarta.persistence.*;
 import lombok.Data;
 
 import java.io.*;
 import java.util.List;
 
-@Entity
 @Data
 public class ChunkData {
+    private int chunkX;
+    private int chunkY;
 
-    @EmbeddedId
-    private ChunkKey key;
+    private int[][] tiles;
 
-    @Lob
-    @Column(nullable = false)
-    private byte[] tilesBlob;
-
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "chunk_objects", joinColumns = {
-            @JoinColumn(name = "chunkX", referencedColumnName = "chunkX"),
-            @JoinColumn(name = "chunkY", referencedColumnName = "chunkY")
-    })
     private List<WorldObject> objects;
 
-
-    public void setTiles(int[][] tiles) {
-        this.tilesBlob = serializeTiles(tiles);
-    }
+    private transient byte[] tilesBlob;
 
     public int[][] getTiles() {
-        return deserializeTiles(this.tilesBlob);
+        if (tiles == null && tilesBlob != null) {
+            tiles = deserializeTiles(tilesBlob);
+        }
+        return tiles;
+    }
+
+    public void setTiles(int[][] tiles) {
+        this.tiles = tiles;
+        this.tilesBlob = serializeTiles(tiles);
     }
 
     private byte[] serializeTiles(int[][] tiles) {
@@ -51,20 +46,6 @@ public class ChunkData {
             return (int[][]) ois.readObject();
         } catch (IOException | ClassNotFoundException e) {
             throw new RuntimeException("Failed to deserialize tiles", e);
-        }
-    }
-
-    @Embeddable
-    @Data
-    public static class ChunkKey implements Serializable {
-        private int chunkX;
-        private int chunkY;
-
-        public ChunkKey() {}
-
-        public ChunkKey(int chunkX, int chunkY) {
-            this.chunkX = chunkX;
-            this.chunkY = chunkY;
         }
     }
 }

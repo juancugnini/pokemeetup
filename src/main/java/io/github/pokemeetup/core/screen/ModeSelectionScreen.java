@@ -3,7 +3,6 @@ package io.github.pokemeetup.core.screen;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.GL20;
-import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
@@ -29,8 +28,6 @@ public class ModeSelectionScreen implements Screen {
     private Stage stage;
     private Skin skin;
     private Window settingsWindow;
-    private Table mainTable;
-    private float backgroundOffset;
 
     @Override
     public void show() {
@@ -46,7 +43,7 @@ public class ModeSelectionScreen implements Screen {
     }
 
     private void createMainMenu() {
-        mainTable = new Table();
+        Table mainTable = new Table();
         mainTable.setFillParent(true);
 
 

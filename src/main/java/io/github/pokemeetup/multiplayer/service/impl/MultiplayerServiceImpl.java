@@ -59,10 +59,16 @@ public class MultiplayerServiceImpl implements MultiplayerService {
     @Override
     public ChunkUpdate getChunkData(int chunkX, int chunkY) {
         int[][] tiles = worldService.getChunkTiles(chunkX, chunkY);
-        List<WorldObject> objs = worldService.getWorldData()
-                .getChunks()
-                .get(chunkX + "," + chunkY)
-                .getObjects();
+        if (tiles == null) return null;
+
+        var wd = worldService.getWorldData();
+        if (wd == null) return null;
+
+        String key = chunkX + "," + chunkY;
+        var chunkData = wd.getChunks().get(key);
+        if (chunkData == null) return null;
+
+        List<WorldObject> objs = chunkData.getObjects();
 
         ChunkUpdate update = new ChunkUpdate();
         update.setChunkX(chunkX);
