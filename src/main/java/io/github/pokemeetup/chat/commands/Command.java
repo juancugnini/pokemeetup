@@ -11,6 +11,5 @@ public interface Command {
     String getUsage();
     boolean isMultiplayerOnly();
 
-    
     void execute(String args, PlayerService playerService, ChatService chatService, MultiplayerClient multiplayerClient);
 }

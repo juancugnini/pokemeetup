@@ -62,7 +62,7 @@ public class TeleportPositionCommand implements Command {
             if (multiplayerClient.isConnected()) {
                 multiplayerClient.sendPlayerMove(player.getX(), player.getY(), player.isWantsToRun(), player.isMoving(), player.getDirection().name().toLowerCase());
             }
-            chatService.addSystemMessage("Teleported to spawn point!");
+            chatService.addSystemMessage("Teleported to (" + tileX + ", " + tileY + ")");
         } catch (Exception e) {
             log.error("Error executing tp command: " + e.getMessage());
         }
