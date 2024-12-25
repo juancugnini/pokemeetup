@@ -2,33 +2,44 @@ package io.github.pokemeetup.player.service.impl;
 
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.math.Rectangle;
+import io.github.pokemeetup.event.EventBus;
+import io.github.pokemeetup.input.InputService;
+import io.github.pokemeetup.multiplayer.service.MultiplayerClient;
+import io.github.pokemeetup.player.config.PlayerProperties;
+import io.github.pokemeetup.player.event.PlayerMoveEvent;
 import io.github.pokemeetup.player.model.PlayerData;
 import io.github.pokemeetup.player.model.PlayerDirection;
 import io.github.pokemeetup.player.model.PlayerModel;
 import io.github.pokemeetup.player.service.PlayerAnimationService;
 import io.github.pokemeetup.player.service.PlayerService;
-import io.github.pokemeetup.input.InputService;
-import io.github.pokemeetup.player.config.PlayerProperties;
+import io.github.pokemeetup.world.model.ChunkData;
+import io.github.pokemeetup.world.model.WorldObject;
 import io.github.pokemeetup.world.service.WorldService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 
+import java.util.ArrayList;
+import java.util.List;
+
+@Slf4j
 public class PlayerServiceImpl implements PlayerService {
-    private static final Logger logger = LoggerFactory.getLogger(PlayerServiceImpl.class);
+    public final int TILE_SIZE = 32;
 
     private final PlayerModel playerModel;
     private final PlayerAnimationService animationService;
     private final WorldService worldService;
-    private final String username;
-
-    // Durations for walking/running a single tile
+    private String username;
     private final float walkStepDuration;
     private final float runStepDuration;
-
     private final InputService inputService;
-
-    // To allow buffering next direction if pressed mid-step
     private PlayerDirection bufferedDirection = null;
+
+    @Autowired
+    private EventBus eventBus;
+
+    @Autowired
+    private MultiplayerClient multiplayerClient;
 
     public PlayerServiceImpl(
             PlayerAnimationService animationService,
@@ -48,31 +59,45 @@ public class PlayerServiceImpl implements PlayerService {
 
     @Override
     public void move(PlayerDirection direction) {
+        // If currently mid-move, buffer the new direction for after finishing
         if (playerModel.isMoving()) {
-            // If already moving, buffer next direction
-            logger.debug("Currently moving. Buffering direction: {}", direction);
+            log.debug("Currently moving. Buffering direction: {}", direction);
             this.bufferedDirection = direction;
             return;
         }
 
-        playerModel.setRunning(inputService.isRunning());
-        playerModel.setDirection(direction);
-
         float currentX = playerModel.getPosition().x;
         float currentY = playerModel.getPosition().y;
-        float tileSize = PlayerModel.TILE_SIZE;
+        float tileSize = TILE_SIZE;
 
-        float targetX = currentX;
-        float targetY = currentY;
+        int currentTileX = (int) (currentX / tileSize);
+        int currentTileY = (int) (currentY / tileSize);
 
+        // Calculate the attempted tile
+        int targetTileX = currentTileX;
+        int targetTileY = currentTileY;
         switch (direction) {
-            case UP -> targetY += tileSize;
-            case DOWN -> targetY -= tileSize;
-            case LEFT -> targetX -= tileSize;
-            case RIGHT -> targetX += tileSize;
+            case UP -> targetTileY += 1;
+            case DOWN -> targetTileY -= 1;
+            case LEFT -> targetTileX -= 1;
+            case RIGHT -> targetTileX += 1;
         }
 
-        // Collision checks would be here if needed
+        // Always set direction so we appear to face that way even if blocked
+        playerModel.setDirection(direction);
+
+        if (isColliding(targetTileX, targetTileY)) {
+            log.debug("Collision at ({}, {}): no movement, but direction updated to {}",
+                    targetTileX, targetTileY, direction);
+            // No movement, remain idle, but direction is changed
+            playerModel.setMoving(false);
+            return;
+        }
+
+        // If passable, we do run/walk
+        playerModel.setRunning(inputService.isRunning());
+        float targetX = targetTileX * tileSize;
+        float targetY = targetTileY * tileSize;
 
         playerModel.setStartPosition(currentX, currentY);
         playerModel.setTargetPosition(targetX, targetY);
@@ -80,11 +105,62 @@ public class PlayerServiceImpl implements PlayerService {
         float duration = playerModel.isRunning() ? runStepDuration : walkStepDuration;
         playerModel.setMovementDuration(duration);
 
-        playerModel.setStateTime(0f);
+        // DO NOT reset stateTime, so the animation doesn't restart every step:
+        // playerModel.setStateTime(0f);
+
+        // We still reset movementTime for tile interpolation:
         playerModel.setMovementTime(0f);
+
         playerModel.setMoving(true);
 
-        logger.debug("Initiated movement: {}, Target=({}, {}), Duration={}", direction, targetX, targetY, duration);
+        log.debug("Initiated movement: {}, Target=({}, {}), Duration={}",
+                direction, targetX, targetY, duration);
+    }
+
+
+    private boolean isColliding(int tileX, int tileY) {
+        int chunkX = tileX / 16;
+        int chunkY = tileY / 16;
+        int[][] chunkTiles = worldService.getChunkTiles(chunkX, chunkY);
+        if (chunkTiles == null) return true;
+
+        int localX = Math.floorMod(tileX, 16);
+        int localY = Math.floorMod(tileY, 16);
+        if (localX < 0 || localX >= 16 || localY < 0 || localY >= 16) return true;
+
+        int tileID = chunkTiles[localX][localY];
+        if (!worldService.getTileManager().isPassable(tileID)) {
+            return true;
+        }
+
+        float tileSize = TILE_SIZE;
+        Rectangle targetTileRect = new Rectangle(tileX * tileSize, tileY * tileSize, tileSize, tileSize);
+
+        List<WorldObject> nearbyObjects = new ArrayList<>();
+
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                int neighborChunkX = chunkX + dx;
+                int neighborChunkY = chunkY + dy;
+                String chunkKey = neighborChunkX + "," + neighborChunkY;
+                ChunkData chunkData = worldService.getWorldData().getChunks().get(chunkKey);
+                if (chunkData != null && chunkData.getObjects() != null) {
+                    nearbyObjects.addAll(chunkData.getObjects());
+                }
+            }
+        }
+
+        for (WorldObject obj : nearbyObjects) {
+            if (!obj.isCollidable()) continue;
+            Rectangle collisionBox = obj.getCollisionBox();
+            if (collisionBox == null) continue;
+            if (collisionBox.overlaps(targetTileRect)) {
+                log.debug("Collision detected with object {} at tile ({}, {})", obj.getId(), tileX, tileY);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     @Override
@@ -104,32 +180,35 @@ public class PlayerServiceImpl implements PlayerService {
             playerModel.setMovementTime(playerModel.getMovementTime() + delta);
 
             if (progress >= 1f) {
-                // Movement finished
                 playerModel.setMoving(false);
                 playerModel.setPosition(playerModel.getTargetPosition().x, playerModel.getTargetPosition().y);
 
-                // Update player data in world
-                worldService.setPlayerData(getPlayerData());
+                // Movement completed, send updated position to the server
+                PlayerData pd = getPlayerData();
+                worldService.setPlayerData(pd);
+                multiplayerClient.sendPlayerMove(
+                        pd.getX(),
+                        pd.getY(),
+                        pd.isWantsToRun(),
+                        pd.isMoving(),
+                        pd.getDirection().name().toLowerCase()
+                );
 
-                // If we had a buffered direction, move immediately in that direction
                 if (bufferedDirection != null) {
                     PlayerDirection nextDir = bufferedDirection;
                     bufferedDirection = null;
                     move(nextDir);
                 } else {
-                    // No buffered direction, check if the player is still holding a direction
                     PlayerDirection dir = inputService.getCurrentDirection();
                     if (dir != null) {
                         move(dir);
                     } else {
-                        // Standing still
                         playerModel.setMoving(false);
                         playerModel.setRunning(false);
                     }
                 }
             }
         } else {
-            // Not moving, check if direction is pressed
             PlayerDirection dir = inputService.getCurrentDirection();
             if (dir != null) {
                 move(dir);
@@ -137,6 +216,10 @@ public class PlayerServiceImpl implements PlayerService {
                 playerModel.setMoving(false);
                 playerModel.setRunning(false);
             }
+        }
+
+        if (!playerModel.isMoving()) {
+            eventBus.fireEvent(new PlayerMoveEvent(getPlayerData()));
         }
     }
 
@@ -162,21 +245,36 @@ public class PlayerServiceImpl implements PlayerService {
 
     @Override
     public PlayerData getPlayerData() {
-        float tileX = playerModel.getPosition().x / PlayerModel.TILE_SIZE;
-        float tileY = playerModel.getPosition().y / PlayerModel.TILE_SIZE;
+        float tileX = playerModel.getPosition().x / TILE_SIZE;
+        float tileY = playerModel.getPosition().y / TILE_SIZE;
         return new PlayerData(username, tileX, tileY);
+    }
+
+    @Override
+    public void setPlayerData(PlayerData data) {
+        if (data.getUsername() != null && !data.getUsername().isEmpty()) {
+            this.username = data.getUsername();
+        }
+
+        int tileX = (int) data.getX();
+        int tileY = (int) data.getY();
+        setPosition(tileX, tileY);
+
+        log.debug("Player data updated: username={}, x={}, y={}", data.getUsername(), data.getX(), data.getY());
+
+        worldService.setPlayerData(data);
     }
 
     @Override
     public void setRunning(boolean running) {
         playerModel.setRunning(running);
-        logger.debug("Set running to {}", running);
+        log.debug("Set running to {}", running);
     }
 
     @Override
     public void setPosition(int tileX, int tileY) {
-        float x = tileX * PlayerModel.TILE_SIZE;
-        float y = tileY * PlayerModel.TILE_SIZE;
+        float x = tileX * TILE_SIZE;
+        float y = tileY * TILE_SIZE;
         playerModel.setPosition(x, y);
         playerModel.setStartPosition(x, y);
         playerModel.setTargetPosition(x, y);
@@ -184,6 +282,6 @@ public class PlayerServiceImpl implements PlayerService {
         playerModel.setMovementTime(0f);
         playerModel.setStateTime(0f);
         this.bufferedDirection = null;
-        logger.debug("Set position to ({}, {})", x, y);
+        log.debug("Set position to ({}, {})", x, y);
     }
 }

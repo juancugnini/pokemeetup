@@ -7,42 +7,37 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.Array;
 import io.github.pokemeetup.player.model.PlayerDirection;
 import io.github.pokemeetup.player.service.PlayerAnimationService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-/**
- * Implementation of PlayerAnimationService to handle player animations.
- */
-@Service
-public class PlayerAnimationServiceImpl implements PlayerAnimationService {
-    private static final Logger logger = LoggerFactory.getLogger(PlayerAnimationServiceImpl.class);
+import java.util.Comparator;
 
-    // Frame durations aligned with movement durations
-    private static final float WALK_FRAME_DURATION = 0.06f; // 5 frames per 0.3s walk step
-    private static final float RUN_FRAME_DURATION = 0.03f;  // 5 frames per 0.15s run step
+@Service
+@Slf4j
+public class PlayerAnimationServiceImpl implements PlayerAnimationService {
+
+    /**
+     * Increase the frame duration for walking to slow down the animation slightly.
+     *
+     * With 3 frames, 0.10f means ~10 FPS (1 / 0.10). Feel free to adjust as needed.
+     */
+    private static final float WALK_FRAME_DURATION = 0.10f;
+
+    /**
+     * Increase the frame duration for running but still keep it slightly faster than walk.
+     *
+     * With 3 frames, 0.06f means ~16.7 FPS (1 / 0.06). Adjust if you need a different feel.
+     */
+    private static final float RUN_FRAME_DURATION = 0.06f;
 
     private TextureRegion standingUp, standingDown, standingLeft, standingRight;
     private Animation<TextureRegion> walkUp, walkDown, walkLeft, walkRight;
     private Animation<TextureRegion> runUp, runDown, runLeft, runRight;
     private boolean initialized = false;
 
-    /**
-     * Constructor initializes animations.
-     */
     public PlayerAnimationServiceImpl() {
-
     }
 
-    /**
-     * Retrieves the current animation frame based on player state.
-     *
-     * @param direction Current direction of the player.
-     * @param moving    Whether the player is moving.
-     * @param running   Whether the player is running.
-     * @param stateTime Time elapsed in the current animation state.
-     * @return Current TextureRegion to render.
-     */
     @Override
     public TextureRegion getCurrentFrame(PlayerDirection direction, boolean moving, boolean running, float stateTime) {
         if (!moving) {
@@ -50,15 +45,9 @@ public class PlayerAnimationServiceImpl implements PlayerAnimationService {
         }
 
         Animation<TextureRegion> anim = getMovementAnimation(direction, running);
-        return anim.getKeyFrame(stateTime, true); // Looping animation
+        return anim.getKeyFrame(stateTime, true);
     }
 
-    /**
-     * Retrieves the standing frame based on direction.
-     *
-     * @param direction Current direction of the player.
-     * @return TextureRegion representing the standing frame.
-     */
     @Override
     public TextureRegion getStandingFrame(PlayerDirection direction) {
         return switch (direction) {
@@ -66,51 +55,41 @@ public class PlayerAnimationServiceImpl implements PlayerAnimationService {
             case DOWN -> standingDown;
             case LEFT -> standingLeft;
             case RIGHT -> standingRight;
-            default -> standingDown;
         };
     }
 
-    /**
-     * Retrieves the appropriate movement animation based on direction and running state.
-     *
-     * @param direction Current direction of the player.
-     * @param running   Whether the player is running.
-     * @return Corresponding Animation<TextureRegion>.
-     */
     private Animation<TextureRegion> getMovementAnimation(PlayerDirection direction, boolean running) {
         return switch (direction) {
             case UP -> running ? runUp : walkUp;
             case DOWN -> running ? runDown : walkDown;
             case LEFT -> running ? runLeft : walkLeft;
             case RIGHT -> running ? runRight : walkRight;
-            default -> walkDown;
         };
     }
 
-    /**
-     * Loads all necessary animations from the TextureAtlas.
-     */
     private void loadAnimations() {
         String atlasPath = "assets/atlas/boy-gfx-atlas";
-        logger.info("Loading TextureAtlas from path: {}", atlasPath);
+        log.info("Loading TextureAtlas from path: {}", atlasPath);
         TextureAtlas atlas = new TextureAtlas(Gdx.files.internal(atlasPath));
 
-        logger.info("Available regions in the atlas:");
+        log.info("Available regions in the atlas:");
         for (TextureAtlas.AtlasRegion region : atlas.getRegions()) {
-            logger.info("- {} (index: {})", region.name, region.index);
+            log.info("- {} (index: {})", region.name, region.index);
         }
 
+        // Create the walking animations (3 frames expected, but will work with however many frames are found)
         walkUp = createLoopAnimation(atlas, "boy_walk_up", WALK_FRAME_DURATION);
         walkDown = createLoopAnimation(atlas, "boy_walk_down", WALK_FRAME_DURATION);
         walkLeft = createLoopAnimation(atlas, "boy_walk_left", WALK_FRAME_DURATION);
         walkRight = createLoopAnimation(atlas, "boy_walk_right", WALK_FRAME_DURATION);
 
-        // Set standing frames to the first frame of walking animations
+        // Standing frames are simply the first key frame of each animation
         standingUp = walkUp.getKeyFrames()[0];
         standingDown = walkDown.getKeyFrames()[0];
         standingLeft = walkLeft.getKeyFrames()[0];
         standingRight = walkRight.getKeyFrames()[0];
 
+        // Create the running animations (3 frames expected, but will work with however many frames are found)
         runUp = createLoopAnimation(atlas, "boy_run_up", RUN_FRAME_DURATION);
         runDown = createLoopAnimation(atlas, "boy_run_down", RUN_FRAME_DURATION);
         runLeft = createLoopAnimation(atlas, "boy_run_left", RUN_FRAME_DURATION);
@@ -119,41 +98,29 @@ public class PlayerAnimationServiceImpl implements PlayerAnimationService {
 
     public void initAnimationsIfNeeded() {
         if (!initialized) {
-            loadAnimations(); // Now it's safe, assuming Gdx is ready
+            loadAnimations();
             initialized = true;
         }
     }
 
-    /**
-     * Creates a looping animation for a given base name.
-     *
-     * @param atlas    TextureAtlas containing the animation frames.
-     * @param baseName Base name of the animation frames.
-     * @param duration Duration per frame.
-     * @return Looping Animation<TextureRegion>.
-     */
     private Animation<TextureRegion> createLoopAnimation(TextureAtlas atlas, String baseName, float duration) {
         Array<TextureAtlas.AtlasRegion> regions = atlas.findRegions(baseName);
         if (regions.size == 0) {
-            logger.error("No regions found for animation: {}", baseName);
+            log.error("No regions found for animation: {}", baseName);
             throw new RuntimeException("No regions found for animation: " + baseName);
         }
 
-        regions.sort((a, b) -> Integer.compare(a.index, b.index));
+        // Sort frames by index to ensure correct ordering
+        regions.sort(Comparator.comparingInt(a -> a.index));
 
-        // Log number of frames and duration
-        logger.info("Creating animation '{}', frames: {}, frameDuration: {}",
+        log.info("Creating animation '{}', frames: {}, frameDuration: {}",
                 baseName, regions.size, duration);
 
         Animation<TextureRegion> anim = new Animation<>(duration, regions, Animation.PlayMode.LOOP);
-        logger.debug("Created loop animation: {}", baseName);
+        log.debug("Created loop animation: {}", baseName);
         return anim;
     }
 
-    /**
-     * Disposes of animation resources if necessary.
-     */
     public void dispose() {
-        // Dispose of resources if necessary
     }
 }

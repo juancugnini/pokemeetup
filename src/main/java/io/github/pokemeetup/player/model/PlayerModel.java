@@ -1,14 +1,13 @@
 package io.github.pokemeetup.player.model;
 
 import com.badlogic.gdx.math.Vector2;
-import io.github.pokemeetup.player.model.PlayerDirection;
 import lombok.Getter;
 import lombok.Setter;
 
 @Getter
 @Setter
 public class PlayerModel {
-    public static final int TILE_SIZE = 32;
+    public final int TILE_SIZE = 32;
 
     private Vector2 position;
     private Vector2 startPosition;
@@ -19,7 +18,7 @@ public class PlayerModel {
     private boolean running;
 
     private float movementTime = 0f;
-    private float movementDuration = 0.2f; // Default duration, can be overridden
+    private float movementDuration = 0.2f;
     private float runSpeedMultiplier = 1.75f;
 
     private float stateTime = 0f;

@@ -1,29 +1,24 @@
 package io.github.pokemeetup.player.model;
 
+import lombok.Data;
+
+@Data
 public class PlayerData {
     private String username;
+
     private float x;
     private float y;
+    private boolean wantsToRun;
+    private boolean moving;
+    private PlayerDirection direction = PlayerDirection.DOWN;
 
-    public PlayerData() {
-    }
+    public PlayerData() {}
 
     public PlayerData(String username, float x, float y) {
         this.username = username;
         this.x = x;
         this.y = y;
+        this.wantsToRun = false;
+        this.moving = false;
     }
-
-    public String getUsername() {
-        return username;
-    }
-    public void setUsername(String username) {
-        this.username = username;
-    }
-
-    public float getX() { return x; }
-    public void setX(float x) { this.x = x; }
-
-    public float getY() { return y; }
-    public void setY(float y) { this.y = y; }
 }

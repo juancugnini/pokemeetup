@@ -10,9 +10,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * Configuration class for player-related beans.
- */
+
 @Configuration
 @EnableConfigurationProperties(PlayerProperties.class)
 public class PlayerConfig {
@@ -29,12 +27,7 @@ public class PlayerConfig {
 
     }
 
-    /**
-     * Bean definition for PlayerService.
-     *
-     * @param animationService Service for handling player animations.
-     * @return Instance of PlayerService.
-     */
+    
     @Bean
     public PlayerService playerService(
             PlayerAnimationService animationService

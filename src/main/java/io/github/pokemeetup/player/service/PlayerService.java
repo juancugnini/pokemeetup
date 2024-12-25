@@ -10,6 +10,8 @@ public interface PlayerService {
     void render(SpriteBatch batch);
 
     PlayerData getPlayerData();
+    void setPlayerData(PlayerData data);
+
     void setRunning(boolean running);
     void setPosition(int tileX, int tileY);
 }

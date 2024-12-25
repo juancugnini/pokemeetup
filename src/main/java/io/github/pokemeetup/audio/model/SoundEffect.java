@@ -1,5 +1,8 @@
 package io.github.pokemeetup.audio.model;
 
+import lombok.Getter;
+
+@Getter
 public enum SoundEffect {
     ITEM_PICKUP("sounds/pickup.ogg"),
     MENU_SELECT("sounds/select.ogg"),
@@ -30,7 +33,4 @@ public enum SoundEffect {
         this.path = path;
     }
 
-    public String getPath() {
-        return path;
-    }
 }

@@ -5,6 +5,7 @@ import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.math.MathUtils;
 import io.github.pokemeetup.audio.model.SoundEffect;
+import io.github.pokemeetup.audio.model.WeatherSoundEffect;
 import io.github.pokemeetup.audio.service.AudioService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,6 +20,9 @@ public class AudioServiceImpl implements AudioService {
     private static final Logger logger = LoggerFactory.getLogger(AudioServiceImpl.class);
 
     private final Map<SoundEffect, Sound> sounds = new EnumMap<>(SoundEffect.class);
+
+    private final Map<WeatherSoundEffect, Music> weatherLoops = new EnumMap<>(WeatherSoundEffect.class);
+    private final Map<WeatherSoundEffect, Sound> weatherSounds = new EnumMap<>(WeatherSoundEffect.class);
 
     private List<Music> menuMusicList;
     private Music currentMusic;
@@ -38,24 +42,47 @@ public class AudioServiceImpl implements AudioService {
     private float fadeInMusicTimer = 0f;
 
     public AudioServiceImpl() {
-        // Don't initialize audio here!
-        // Gdx is not yet initialized.
     }
 
     @Override
     public void initAudio() {
-        // This method is called after Gdx is ready
         initializeAudio();
     }
 
     private void initializeAudio() {
-        // Load sounds
+
         for (SoundEffect effect : SoundEffect.values()) {
             try {
                 Sound sound = Gdx.audio.newSound(Gdx.files.internal("assets/" + effect.getPath()));
                 sounds.put(effect, sound);
             } catch (Exception e) {
                 logger.error("Failed to load sound: {}", effect.getPath(), e);
+            }
+        }
+
+
+
+
+        for (WeatherSoundEffect wEffect : WeatherSoundEffect.values()) {
+            String path = "assets/" + wEffect.getPath();
+            if (wEffect == WeatherSoundEffect.THUNDER) {
+
+                try {
+                    Sound wSound = Gdx.audio.newSound(Gdx.files.internal(path));
+                    weatherSounds.put(wEffect, wSound);
+                } catch (Exception e) {
+                    logger.error("Failed to load weather sound: {}", path, e);
+                }
+            } else {
+
+                try {
+                    Music wMusic = Gdx.audio.newMusic(Gdx.files.internal(path));
+                    wMusic.setLooping(true);
+                    wMusic.setVolume(0f);
+                    weatherLoops.put(wEffect, wMusic);
+                } catch (Exception e) {
+                    logger.error("Failed to load weather loop: {}", path, e);
+                }
             }
         }
 
@@ -159,6 +186,47 @@ public class AudioServiceImpl implements AudioService {
     }
 
     @Override
+    public void playWeatherSound(WeatherSoundEffect effect, float volume, float pitch) {
+        if (!soundEnabled) return;
+
+        Sound wSound = weatherSounds.get(effect);
+        if (wSound != null) {
+            long id = wSound.play(volume * soundVolume * masterVolume);
+            wSound.setPitch(id, pitch);
+        } else {
+            logger.debug("Weather sound {} not found or not loaded as Sound.", effect);
+        }
+    }
+
+    @Override
+    public void updateWeatherLoop(WeatherSoundEffect effect, float volume) {
+        if (!soundEnabled) return;
+
+        Music loop = weatherLoops.get(effect);
+        if (loop != null) {
+            if (!loop.isPlaying()) {
+                loop.play();
+            }
+            float finalVolume = volume * soundVolume * masterVolume;
+            loop.setVolume(finalVolume);
+
+            if (finalVolume <= 0.01f) {
+                loop.pause();
+            }
+        } else {
+            logger.debug("Weather loop {} not found or not loaded as Music.", effect);
+        }
+    }
+
+    @Override
+    public void stopWeatherLoop(WeatherSoundEffect effect) {
+        Music loop = weatherLoops.get(effect);
+        if (loop != null && loop.isPlaying()) {
+            loop.stop();
+        }
+    }
+
+    @Override
     public float getMusicVolume() {
         return musicVolume;
     }
@@ -179,6 +247,16 @@ public class AudioServiceImpl implements AudioService {
     @Override
     public void setSoundVolume(float soundVolume) {
         this.soundVolume = soundVolume;
+
+        for (Music loop : weatherLoops.values()) {
+            if (loop.isPlaying()) {
+
+
+
+                float currentVol = loop.getVolume() / (masterVolume);
+                loop.setVolume(currentVol * soundVolume);
+            }
+        }
     }
 
     @Override
@@ -209,6 +287,17 @@ public class AudioServiceImpl implements AudioService {
     @Override
     public void setSoundEnabled(boolean soundEnabled) {
         this.soundEnabled = soundEnabled;
+
+        if (!soundEnabled) {
+            for (Music loop : weatherLoops.values()) {
+                if (loop.isPlaying()) {
+                    loop.pause();
+                }
+            }
+        } else {
+
+
+        }
     }
 
     private void stopCurrentMusic() {
@@ -237,5 +326,16 @@ public class AudioServiceImpl implements AudioService {
             }
             menuMusicList.clear();
         }
+
+
+        for (Sound wSound : weatherSounds.values()) {
+            wSound.dispose();
+        }
+        weatherSounds.clear();
+
+        for (Music loop : weatherLoops.values()) {
+            loop.dispose();
+        }
+        weatherLoops.clear();
     }
 }
